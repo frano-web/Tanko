@@ -50,3 +50,13 @@ Wrzuć wszystkie pliki do repozytorium i w Settings -> Pages wybierz deploy z ga
 - dodać ograniczenia antyspamowe,
 - zapisać samochody w Supabase zamiast tylko localStorage,
 - dodać politykę prywatności i regulamin.
+
+## Logowanie i kody e-mail
+Aplikacja używa kodów OTP w wiadomościach e-mail zamiast linków potwierdzających.
+W Supabase zmień szablony `Confirm signup` oraz `Reset password`, tak aby zawierały `{{ .Token }}` zamiast `{{ .ConfirmationURL }}`.
+
+
+## Logowanie i reset hasła przez link
+- Potwierdzenie rejestracji wraca do `https://frano-web.github.io/Tanko/`.
+- Reset hasła wraca do `https://frano-web.github.io/Tanko/reset-password.html`.
+- W Supabase dodaj oba adresy do Authentication → URL Configuration → Redirect URLs.

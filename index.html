@@ -147,7 +147,12 @@
   </dialog>
 
   <dialog id="resetDialog">
-    <form method="dialog" id="resetForm" class="dialog-form"><div class="dialog-head"><h3>Reset hasła</h3><button class="icon-btn" value="cancel">✕</button></div><p>Podaj e-mail. Wyślemy link do ustawienia nowego hasła.</p><label>E-mail<input id="resetEmail" type="email" required /></label><button class="primary wide" value="default">Wyślij link</button></form>
+    <form id="resetRequestForm" class="dialog-form">
+      <div class="dialog-head"><h3>Reset hasła</h3><button class="icon-btn" type="button" id="closeReset">✕</button></div>
+      <p>Podaj adres e-mail przypisany do konta. Wyślemy Ci bezpieczny link do ustawienia nowego hasła.</p>
+      <label>E-mail<input id="resetEmail" type="email" autocomplete="email" required placeholder="twoj@email.pl" /></label>
+      <button class="primary wide" type="submit" id="sendResetLink">Wyślij link</button>
+    </form>
   </dialog>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

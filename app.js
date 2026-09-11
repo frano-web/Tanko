@@ -1,6 +1,8 @@
 const CONFIG = window.APP_CONFIG || {};
 const hasSupabase = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const sb = hasSupabase ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY) : null;
+const APP_URL = 'https://frano-web.github.io/Tanko/';
+const RESET_URL = 'https://frano-web.github.io/Tanko/reset-password.html';
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -145,15 +147,52 @@ async function requestLocation(){
 }
 
 async function signInOrRegister(e){
-  e.preventDefault();const email=$('authEmail').value.trim(),password=$('authPassword').value;
-  if(hasSupabase){
-    const fn=state.authMode==='login'?sb.auth.signInWithPassword({email,password}):sb.auth.signUp({email,password});
-    const {data,error}=await fn;if(error){toast(error.message);return}state.user=data.user||data.session?.user;if(state.authMode==='register'&&!data.session)toast('Sprawdź e-mail i potwierdź konto.');else enterApp();
-  }else{
-    localStorage.setItem('demoEmail',email);state.user={id:'demo',email};enterApp();
+  e.preventDefault();
+  const email=$('authEmail').value.trim();
+  const password=$('authPassword').value;
+  if(!hasSupabase){toast('Nie udało się połączyć z usługą logowania.');return}
+
+  if(state.authMode==='login'){
+    const {data,error}=await sb.auth.signInWithPassword({email,password});
+    if(error){toast(error.message);return}
+    state.user=data.user||data.session?.user;
+    enterApp();
+    return;
+  }
+
+  const {data,error}=await sb.auth.signUp({
+    email,
+    password,
+    options:{emailRedirectTo:APP_URL}
+  });
+  if(error){toast(error.message);return}
+  if(data.session){state.user=data.user||data.session.user;enterApp();return}
+  toast('Sprawdź pocztę i kliknij link potwierdzający konto.');
+  state.authMode='login';
+  document.querySelectorAll('[data-auth]').forEach(x=>x.classList.toggle('active',x.dataset.auth==='login'));
+  $('authSubmit').textContent='Zaloguj się';
+  $('forgotPassword').style.display='block';
+}
+
+async function requestResetLink(e){
+  e.preventDefault();
+  const email=$('resetEmail').value.trim();
+  if(!email)return;
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:RESET_URL});
+  if(error){toast(error.message);return}
+  $('resetDialog').close();
+  toast('Link do zmiany hasła został wysłany. Sprawdź pocztę.');
+}
+
+function handleAuthHashError(){
+  const hash=new URLSearchParams(location.hash.replace(/^#/,''));
+  const error=hash.get('error_description');
+  if(error){
+    toast(decodeURIComponent(error.replace(/\+/g,' ')));
+    history.replaceState({},document.title,location.pathname+location.search);
   }
 }
-async function resetPassword(){const email=$('resetEmail').value.trim();if(!email)return;if(hasSupabase){const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:'https://frano-web.github.io/Tanko/reset-password.html'});if(error)toast(error.message);else toast('Link do resetu hasła został wysłany.')}else toast('Nie udało się wysłać wiadomości. Spróbuj ponownie później.')}
+
 async function logout(){if(hasSupabase)await sb.auth.signOut();localStorage.removeItem('demoEmail');state.user=null;$('appView').classList.add('hidden');$('authView').classList.remove('hidden')}
 
 function enterApp(){
@@ -183,7 +222,9 @@ async function savePriceReport(){
 // Auth UI
 document.querySelectorAll('[data-auth]').forEach(b=>b.addEventListener('click',()=>{state.authMode=b.dataset.auth;document.querySelectorAll('[data-auth]').forEach(x=>x.classList.toggle('active',x===b));$('authSubmit').textContent=state.authMode==='login'?'Zaloguj się':'Utwórz konto';$('forgotPassword').style.display=state.authMode==='login'?'block':'none'}));
 $('authForm').addEventListener('submit',signInOrRegister);
-$('forgotPassword').addEventListener('click',()=>{$('resetEmail').value=$('authEmail').value;$('resetDialog').showModal()});$('resetForm').addEventListener('submit',resetPassword);
+$('forgotPassword').addEventListener('click',()=>{$('resetEmail').value=$('authEmail').value;$('resetDialog').showModal()});
+$('closeReset').addEventListener('click',()=>$('resetDialog').close());
+$('resetRequestForm').addEventListener('submit',requestResetLink);
 
 // Navigation
 document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>showScreen(b.dataset.screen)));
@@ -211,6 +252,18 @@ if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.ser
 
 (async function init(){
   await loadStations();
-  if(hasSupabase){const {data:{session}}=await sb.auth.getSession();if(session){state.user=session.user;enterApp()}sb.auth.onAuthStateChange((event,session)=>{if(event==='PASSWORD_RECOVERY')window.location.href='./reset-password.html';if(session){state.user=session.user}})}else{const email=localStorage.getItem('demoEmail');if(email){state.user={id:'demo',email};enterApp()}}
+  if(hasSupabase){
+    handleAuthHashError();
+    const {data:{session}}=await sb.auth.getSession();
+    if(session){state.user=session.user;enterApp()}
+    sb.auth.onAuthStateChange((event,session)=>{
+      if(session){
+        state.user=session.user;
+        if($('appView').classList.contains('hidden')) enterApp();
+        if(location.hash) history.replaceState({},document.title,location.pathname+location.search);
+      }
+      if(event==='SIGNED_OUT') state.user=null;
+    })
+  }else{const email=localStorage.getItem('demoEmail');if(email){state.user={id:'demo',email};enterApp()}}
   renderAll();
 })();
