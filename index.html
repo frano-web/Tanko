@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Mobilna aplikacja do wyszukiwania najbardziej opłacalnego tankowania." />
+  <title>Tankuj</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <section id="authView" class="auth-shell">
+    <div class="brand-mark">⛽</div>
+    <h1>Tankuj</h1>
+    <p class="muted center">Znajdź stację, na której naprawdę opłaca się zatankować.</p>
+
+    <div class="auth-card">
+      <div class="segmented" id="authTabs">
+        <button class="seg active" data-auth="login">Logowanie</button>
+        <button class="seg" data-auth="register">Rejestracja</button>
+      </div>
+
+      <form id="authForm">
+        <label>E-mail<input id="authEmail" type="email" autocomplete="email" required placeholder="twoj@email.pl" /></label>
+        <label>Hasło<input id="authPassword" type="password" minlength="6" autocomplete="current-password" required placeholder="minimum 6 znaków" /></label>
+        <button class="primary wide" type="submit" id="authSubmit">Zaloguj się</button>
+      </form>
+      <button id="forgotPassword" class="link-btn">Nie pamiętasz hasła?</button>
+      <p class="demo-note">Wersja testowa działa też bez podłączonego Supabase — dane są wtedy zapisywane lokalnie w telefonie.</p>
+    </div>
+  </section>
+
+  <main id="appView" class="app hidden">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">AKTYWNY SAMOCHÓD</span>
+        <button id="carSwitcher" class="car-switcher">Dodaj samochód ▾</button>
+      </div>
+      <button id="pointsChip" class="points-chip">⭐ <span id="pointsValue">0</span></button>
+    </header>
+
+    <section id="installBanner" class="install-banner hidden">
+      <div><strong>Dodaj Tankuj do ekranu głównego</strong><span>Otwieraj jak zwykłą aplikację.</span></div>
+      <div class="inline-actions"><button id="installBtn" class="small-primary">Dodaj</button><button id="installDismiss" class="icon-btn">✕</button></div>
+    </section>
+
+    <section id="locationBanner" class="permission-banner">
+      <div><strong>Włącz lokalizację</strong><span>Potrzebujemy GPS, aby pokazać stacje w pobliżu i policzyć koszt dojazdu.</span></div>
+      <button id="enableLocation" class="small-primary">Włącz GPS</button>
+    </section>
+
+    <section id="homeScreen" class="screen active">
+      <div class="fuel-picker" id="fuelPicker">
+        <button class="fuel active" data-fuel="pb95">PB95</button>
+        <button class="fuel" data-fuel="pb98">PB98</button>
+        <button class="fuel" data-fuel="on">ON</button>
+        <button class="fuel" data-fuel="lpg">LPG</button>
+      </div>
+
+      <div class="hero-card">
+        <div class="hero-head"><div><span class="eyebrow">NAJLEPSZE TANKOWANIE</span><h2 id="bestStationName">Dodaj samochód</h2></div><span id="bestFreshness" class="confidence neutral">—</span></div>
+        <div class="price-row"><strong id="bestPrice">—</strong><span>zł/l</span></div>
+        <div class="stats-grid">
+          <div><span>Odległość</span><strong id="bestDistance">—</strong></div>
+          <div><span>Przy 45 l</span><strong id="bestSaving">—</strong></div>
+        </div>
+        <div id="worthBadge" class="worth neutral">Dodaj samochód i zezwól na lokalizację</div>
+        <button id="navigateBest" class="primary wide">Nawiguj</button>
+      </div>
+
+      <div class="section-title"><div><span class="eyebrow">RANKING</span><h3>TOP 3 najbardziej opłacalne</h3></div><button id="showAllMap" class="link-btn">Mapa</button></div>
+      <div id="topStations" class="station-list"></div>
+
+      <div class="quick-card">
+        <div><span class="eyebrow">SZYBKA KALKULACJA</span><h3>Ile chcesz zatankować?</h3></div>
+        <div class="liter-control"><button id="minusLiters">−</button><strong><span id="litersValue">45</span> l</strong><button id="plusLiters">+</button></div>
+      </div>
+    </section>
+
+    <section id="mapScreen" class="screen">
+      <div class="section-title"><div><span class="eyebrow">W POBLIŻU</span><h3>Mapa stacji</h3></div><button id="centerMap" class="small-secondary">Moja pozycja</button></div>
+      <div id="map"></div>
+      <div class="map-legend"><span><i class="dot fresh"></i> świeża cena</span><span><i class="dot stale"></i> stara cena</span></div>
+    </section>
+
+    <section id="addScreen" class="screen">
+      <div class="capture-card">
+        <div class="camera-icon">📷</div>
+        <h2>Zaktualizuj ceny</h2>
+        <p>Stań w pobliżu stacji i zrób zdjęcie pylonu. Aplikacja rozpozna ceny, a Ty tylko je potwierdzisz.</p>
+        <label class="camera-btn">Zrób zdjęcie<input id="pylonPhoto" type="file" accept="image/*" capture="environment" hidden /></label>
+        <button id="manualPriceBtn" class="secondary wide">Wpisz cenę ręcznie</button>
+      </div>
+      <div id="ocrPanel" class="ocr-panel hidden">
+        <span class="eyebrow">ROZPOZNANE CENY</span>
+        <h3>Sprawdź przed zapisaniem</h3>
+        <div id="ocrFields"></div>
+        <button id="savePrices" class="primary wide">Potwierdź i zdobądź punkty</button>
+      </div>
+    </section>
+
+    <section id="rankingScreen" class="screen">
+      <div class="section-title"><div><span class="eyebrow">SPOŁECZNOŚĆ</span><h3>Ranking użytkowników</h3></div></div>
+      <div class="segmented rank-tabs"><button class="seg active">Miesiąc</button><button class="seg">Cały czas</button></div>
+      <div id="rankingList" class="ranking-list"></div>
+      <div class="rewards-card"><span class="eyebrow">PUNKTY</span><h3>Nagrody pojawią się wkrótce</h3><p>Zbieraj punkty za zdjęcia pylonów i potwierdzanie aktualnych cen. Punkty zachowasz, gdy uruchomimy nagrody.</p></div>
+    </section>
+
+    <section id="profileScreen" class="screen">
+      <div class="profile-head"><div class="avatar">👤</div><div><span class="eyebrow">PROFIL</span><h3 id="profileEmail">Użytkownik</h3></div></div>
+      <div class="section-title"><div><h3>Twoje samochody</h3></div><button id="addCarBtn" class="small-primary">+ Dodaj</button></div>
+      <div id="carsList" class="cars-list"></div>
+      <div class="settings-card">
+        <button id="changeFuel">⛽ Domyślne paliwo <span id="defaultFuelLabel">PB95</span></button>
+        <button id="changeLocation">📍 Lokalizacja <span id="locationStatus">wyłączona</span></button>
+        <button id="logoutBtn">↩ Wyloguj</button>
+      </div>
+    </section>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-screen="homeScreen"><span>⌂</span><small>Start</small></button>
+      <button class="nav-btn" data-screen="mapScreen"><span>⌖</span><small>Mapa</small></button>
+      <button class="nav-btn add-nav" data-screen="addScreen"><span>＋</span><small>Dodaj</small></button>
+      <button class="nav-btn" data-screen="rankingScreen"><span>♛</span><small>Ranking</small></button>
+      <button class="nav-btn" data-screen="profileScreen"><span>●</span><small>Profil</small></button>
+    </nav>
+  </main>
+
+  <dialog id="carDialog">
+    <form method="dialog" id="carForm" class="dialog-form">
+      <div class="dialog-head"><h3>Dodaj samochód</h3><button class="icon-btn" value="cancel">✕</button></div>
+      <label>Nazwa auta<input id="carName" required placeholder="np. Audi A4 B6" /></label>
+      <label>Silnik<input id="carEngine" placeholder="np. 1.8T" /></label>
+      <label>Rodzaj paliwa<select id="carFuel"><option value="pb95">PB95</option><option value="pb98">PB98</option><option value="on">ON</option><option value="lpg">LPG</option></select></label>
+      <label>Średnie spalanie (l/100 km)<input id="carConsumption" type="number" step="0.1" min="1" max="40" required placeholder="np. 9.0" /></label>
+      <button class="primary wide" value="default" type="submit">Zapisz samochód</button>
+    </form>
+  </dialog>
+
+  <dialog id="carPickerDialog">
+    <div class="dialog-form"><div class="dialog-head"><h3>Wybierz samochód</h3><button class="icon-btn" id="closeCarPicker">✕</button></div><div id="carPickerList" class="cars-list"></div></div>
+  </dialog>
+
+  <dialog id="resetDialog">
+    <form method="dialog" id="resetForm" class="dialog-form"><div class="dialog-head"><h3>Reset hasła</h3><button class="icon-btn" value="cancel">✕</button></div><p>Podaj e-mail. Wyślemy link do ustawienia nowego hasła.</p><label>E-mail<input id="resetEmail" type="email" required /></label><button class="primary wide" value="default">Wyślij link</button></form>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
