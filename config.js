@@ -1,5 +1,5 @@
-// Uzupełnij po utworzeniu projektu Supabase. Jeśli zostawisz puste, aplikacja działa w trybie DEMO/localStorage.
+// Konfiguracja połączenia aplikacji z Supabase.
 window.APP_CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: ''
+  SUPABASE_URL: 'https://hxcqmghbnyqenkvxbdqz.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_RiRrcgENrfV3zkQGJTLJYg_2z2toscl'
 };

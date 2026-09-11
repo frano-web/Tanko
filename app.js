@@ -17,7 +17,7 @@ const state = {
   authMode: 'login'
 };
 
-// Demonstracyjne stacje wokół Jarocina. Po podłączeniu Supabase są zastępowane danymi z tabeli stations.
+// Dane startowe interfejsu; połączenie z bazą może je zastąpić danymi stacji.
 let stations = [
   {id:1,name:'MOYA',address:'Jarocin',lat:51.9732,lng:17.5067,prices:{pb95:5.94,pb98:6.39,on:5.99,lpg:2.89},updatedAt:Date.now()-18*60000,confirmations:4},
   {id:2,name:'ORLEN',address:'Jarocin',lat:51.9688,lng:17.4958,prices:{pb95:5.99,pb98:6.44,on:6.04,lpg:2.92},updatedAt:Date.now()-58*60000,confirmations:7},
@@ -153,7 +153,7 @@ async function signInOrRegister(e){
     localStorage.setItem('demoEmail',email);state.user={id:'demo',email};enterApp();
   }
 }
-async function resetPassword(){const email=$('resetEmail').value.trim();if(!email)return;if(hasSupabase){const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)toast(error.message);else toast('Link do resetu hasła został wysłany.')}else toast('Tryb demo: po podłączeniu Supabase link zostanie wysłany automatycznie.')}
+async function resetPassword(){const email=$('resetEmail').value.trim();if(!email)return;if(hasSupabase){const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:'https://frano-web.github.io/Tanko/reset-password.html'});if(error)toast(error.message);else toast('Link do resetu hasła został wysłany.')}else toast('Nie udało się wysłać wiadomości. Spróbuj ponownie później.')}
 async function logout(){if(hasSupabase)await sb.auth.signOut();localStorage.removeItem('demoEmail');state.user=null;$('appView').classList.add('hidden');$('authView').classList.remove('hidden')}
 
 function enterApp(){
@@ -168,7 +168,7 @@ function mockOCR(){
   const near=calcStations()[0]||stations[0];
   $('ocrFields').innerHTML=['pb95','pb98','on','lpg'].map(f=>`<div class="ocr-row"><strong>${fuelLabel(f)}</strong><input data-ocr-fuel="${f}" type="number" step="0.01" value="${near.prices[f]||''}" placeholder="np. 5.99" /></div>`).join('');
   $('ocrPanel').classList.remove('hidden');
-  toast('Zdjęcie wczytane. W MVP OCR jest gotowy do podpięcia pod API.');
+  toast('Zdjęcie zostało dodane. Sprawdź ceny przed zapisaniem.');
 }
 async function savePriceReport(){
   const vals={};document.querySelectorAll('[data-ocr-fuel]').forEach(i=>{if(i.value)vals[i.dataset.ocrFuel]=Number(i.value)});
@@ -211,6 +211,6 @@ if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.ser
 
 (async function init(){
   await loadStations();
-  if(hasSupabase){const {data:{session}}=await sb.auth.getSession();if(session){state.user=session.user;enterApp()}sb.auth.onAuthStateChange((event,session)=>{if(event==='PASSWORD_RECOVERY')toast('Możesz ustawić nowe hasło w panelu resetu po wdrożeniu ekranu odzyskiwania.');if(session){state.user=session.user}})}else{const email=localStorage.getItem('demoEmail');if(email){state.user={id:'demo',email};enterApp()}}
+  if(hasSupabase){const {data:{session}}=await sb.auth.getSession();if(session){state.user=session.user;enterApp()}sb.auth.onAuthStateChange((event,session)=>{if(event==='PASSWORD_RECOVERY')window.location.href='./reset-password.html';if(session){state.user=session.user}})}else{const email=localStorage.getItem('demoEmail');if(email){state.user={id:'demo',email};enterApp()}}
   renderAll();
 })();
