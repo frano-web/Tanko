@@ -47,3 +47,6 @@ dialog{border:0;padding:0;background:transparent;width:min(92vw,450px);max-heigh
 .recovery-page{background:radial-gradient(circle at 85% 0%,#dff4e8 0,transparent 34%),var(--bg)}.recovery-shell{min-height:100dvh;max-width:470px;margin:auto;padding:40px 22px;display:flex;flex-direction:column;justify-content:center}.recovery-card{background:#fff;border:1px solid var(--line);border-radius:28px;padding:24px;box-shadow:var(--shadow)}.recovery-card h1{font-size:26px;letter-spacing:-.04em}.back-link{display:block;text-align:center;margin-top:16px;color:var(--brand-dark);text-decoration:none;font-size:11px;font-weight:850}
 
 @media(min-width:760px){body{background:#e8eeea}.app{box-shadow:0 0 0 1px rgba(220,228,224,.7),0 0 70px rgba(15,40,27,.08)}.auth-shell{padding-left:30px;padding-right:30px}}
+
+/* Desktop onboarding click-safety */
+.fullscreen-dialog[open]{z-index:99999}.onboarding{position:relative}.onboarding-skip,.onboarding-footer,.onboarding-footer button{position:relative;z-index:5;pointer-events:auto;cursor:pointer}.slides{pointer-events:none}

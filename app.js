@@ -81,9 +81,18 @@ const slides=[
  {title:'Zbieraj punkty',text:'Zdjęcia i potwierdzenia budują Twój ranking. Nagrody za punkty pojawią się wkrótce.',visual:'<div class="tutorial-wallet">◫<span class="tutorial-coin">●</span></div>'},
  {title:'Tankowanie po trasie',text:'Wpisz cel podróży, a Tanko wskaże opłacalną stację po drodze.',visual:'<div class="tutorial-route"><span class="mini-car">🚗</span><span class="mini-pin">●</span></div>'}
 ];
-function showOnboarding(force=false){if(!force&&state.profile?.onboarding_completed)return;state.onboardingIndex=0;renderOnboarding();$('onboardingDialog').showModal()}
+function showOnboarding(force=false){if(!force&&(state.profile?.onboarding_completed||localStorage.getItem('tanko_onboarding_completed')==='1'))return;state.onboardingIndex=0;renderOnboarding();const dlg=$('onboardingDialog');if(dlg&&!dlg.open)dlg.showModal()}
 function renderOnboarding(){const s=slides[state.onboardingIndex];$('onboardingSlides').innerHTML=`<div class="slide"><div class="slide-visual">${s.visual}</div><span class="eyebrow">${state.onboardingIndex+1} / ${slides.length}</span><h2>${s.title}</h2><p>${s.text}</p></div>`;$('onboardingDots').innerHTML=slides.map((_,i)=>`<i class="${i===state.onboardingIndex?'active':''}"></i>`).join('');$('onboardingNext').textContent=state.onboardingIndex===slides.length-1?'Zaczynam':'Dalej'}
-async function finishOnboarding(){await sb.from('profiles').update({onboarding_completed:true}).eq('id',state.user.id);state.profile.onboarding_completed=true;$('onboardingDialog').close()}
+async function finishOnboarding(){
+  const dlg=$('onboardingDialog');
+  if(dlg?.open){try{dlg.close()}catch(e){dlg.removeAttribute('open')}}
+  if(state.profile)state.profile.onboarding_completed=true;
+  localStorage.setItem('tanko_onboarding_completed','1');
+  try{
+    const {error}=await sb.from('profiles').update({onboarding_completed:true}).eq('id',state.user.id);
+    if(error)console.warn('Nie zapisano onboardingu w Supabase:',error.message);
+  }catch(e){console.warn('Błąd zapisu onboardingu:',e)}
+}
 
 function navigateToStation(s){if(!s)return;window.open(`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,'_blank')}
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.screen===id));if(id==='mapScreen'){setTimeout(()=>{initMap();state.map.invalidateSize()},60)}playSound('tap')}
@@ -109,7 +118,10 @@ $('bestFavorite').onclick=()=>toggleFavorite(state.selectedStation);$('navigateB
 $('enableFavoriteNotify').onclick=()=>setFavoriteNotify(state.selectedFavoriteStation.id,true);$('skipFavoriteNotify').onclick=()=>$('favoriteNotifyDialog').close();
 $('routeHero').onclick=$('mapRouteFab').onclick=()=>{$('routeResult').innerHTML='';$('routeDialog').showModal()};$('closeRoute').onclick=()=>$('routeDialog').close();$('calculateRoute').onclick=calculateRoute;
 $('soundToggle').onclick=async()=>{const next=!state.profile.sounds_enabled;await sb.from('profiles').update({sounds_enabled:next}).eq('id',state.user.id);state.profile.sounds_enabled=next;if(next)playSound('success');renderProfile()};$('showTutorial').onclick=()=>showOnboarding(true);
-$('skipOnboarding').onclick=finishOnboarding;$('onboardingNext').onclick=()=>{if(state.onboardingIndex<slides.length-1){state.onboardingIndex++;renderOnboarding();playSound('tap')}else finishOnboarding()};
+const skipOnboarding=$('skipOnboarding'), onboardingNext=$('onboardingNext');
+skipOnboarding.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();finishOnboarding()});
+onboardingNext.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(state.onboardingIndex<slides.length-1){state.onboardingIndex++;renderOnboarding();playSound('tap')}else{finishOnboarding()}});
+$('onboardingDialog').addEventListener('cancel',e=>{e.preventDefault();finishOnboarding()});
 $('adminEntry').onclick=async()=>{state.adminStatus='new';document.querySelectorAll('.admin-filters .seg').forEach(x=>x.classList.toggle('active',x.dataset.status==='new'));$('adminDialog').showModal();await loadAdminReports()};$('closeAdmin').onclick=()=>$('adminDialog').close();document.querySelectorAll('.admin-filters .seg').forEach(b=>b.onclick=async()=>{state.adminStatus=b.dataset.status;document.querySelectorAll('.admin-filters .seg').forEach(x=>x.classList.toggle('active',x===b));await loadAdminReports()});
 $('pointsChip').onclick=()=>showScreen('rankingScreen');
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.deferredInstall=e;$('installBanner').classList.remove('hidden')});$('installBtn').onclick=async()=>{if(!state.deferredInstall)return;state.deferredInstall.prompt();await state.deferredInstall.userChoice;state.deferredInstall=null;$('installBanner').classList.add('hidden')};$('installDismiss').onclick=()=>{$('installBanner').classList.add('hidden');localStorage.setItem('tanko_install_dismissed',Date.now())};

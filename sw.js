@@ -1,4 +1,4 @@
-const CACHE='tanko-v11-icons';
+const CACHE='tanko-v11-icons-desktopfix1';
 const CORE=['./','./index.html','./styles.css','./app.js','./config.js','./manifest.webmanifest','./reset-password.html','./icons/favicon-32-v2.png','./icons/favicon-48-v2.png','./icons/apple-touch-icon-v2.png','./icons/icon-192-v2.png','./icons/icon-512-v2.png','./icons/icon-maskable-512-v2.png'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))});
 self.addEventListener('activate',e=>{e.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))]))});
