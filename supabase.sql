@@ -107,7 +107,8 @@ language sql stable security definer set search_path=public as $$
   select exists(select 1 from public.profiles p where p.id=auth.uid() and p.role='admin');
 $$;
 
-create or replace view public.stations_with_latest_prices with (security_invoker=true) as
+drop view if exists public.stations_with_latest_prices;
+create view public.stations_with_latest_prices with (security_invoker=true) as
 select s.id,s.name,s.address,s.latitude,s.longitude,s.brand,s.source,s.external_id,s.photo_url,s.is_closed,
   (r.prices->>'pb95')::numeric as pb95,
   (r.prices->>'pb98')::numeric as pb98,

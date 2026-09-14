@@ -6,9 +6,11 @@
   <meta name="theme-color" content="#07140f" />
   <meta name="description" content="Tanko — społecznościowa mapa cen paliw i asystent opłacalnego tankowania." />
   <title>Tanko</title>
-  <link rel="icon" href="icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32-v2.png" />
+  <link rel="icon" type="image/png" sizes="48x48" href="./icons/favicon-48-v2.png" />
+  <link rel="shortcut icon" href="./icons/favicon-32-v2.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-v2.png" />
+  <link rel="manifest" href="./manifest.webmanifest?v=2" />
   <link rel="preconnect" href="https://unpkg.com" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -35,7 +37,7 @@
 
   <main id="appView" class="app hidden">
     <header class="topbar">
-      <button id="carSwitcher" class="car-switcher"><span class="car-dot">●</span><span id="carSwitcherText">Dodaj samochód</span><span>⌄</span></button>
+      <div class="topbar-left"><img class="app-mark" src="./icons/icon-192-v2.png" alt="Tanko" /><button id="carSwitcher" class="car-switcher"><span class="car-dot">●</span><span id="carSwitcherText">Dodaj samochód</span><span>⌄</span></button></div>
       <button id="pointsChip" class="points-chip" aria-label="Punkty"><span class="wallet-icon">◫</span><strong id="pointsValue">0</strong><small>pkt</small></button>
     </header>
 
