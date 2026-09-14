@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f172a" />
-  <meta name="description" content="Mobilna aplikacja do wyszukiwania najbardziej opłacalnego tankowania." />
+  <meta name="theme-color" content="#07140f" />
+  <meta name="description" content="Tanko — społecznościowa mapa cen paliw i asystent opłacalnego tankowania." />
   <title>Tanko</title>
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://unpkg.com" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -13,150 +15,103 @@
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
+  <div id="pointsBurst" class="points-burst hidden"><span>+0</span><small>pkt</small></div>
 
   <section id="authView" class="auth-shell">
-    <div class="brand-lockup"><div class="brand-mark">T</div><span class="brand-dot"></span></div>
-    <h1>Tanko</h1>
-    <p class="muted center">Znajdź stację, na której naprawdę opłaca się zatankować.</p>
-
+    <div class="auth-visual">
+      <div class="fuel-logo" aria-label="Tanko"><svg viewBox="0 0 64 64"><path d="M13 8h25a6 6 0 0 1 6 6v42H7V14a6 6 0 0 1 6-6Z"/><path d="M44 20h5l7 8v19a5 5 0 0 1-10 0V34"/><path d="M14 15h23v15H14z"/><path d="M12 56h34"/></svg></div>
+      <div><span class="brand-kicker">TANKO</span><h1>Tankuj mądrzej.</h1><p>Aktualne ceny od kierowców, realny koszt dojazdu i najlepsza stacja po Twojej trasie.</p></div>
+    </div>
     <div class="auth-card">
-      <div class="segmented" id="authTabs">
-        <button class="seg active" data-auth="login">Logowanie</button>
-        <button class="seg" data-auth="register">Rejestracja</button>
-      </div>
-
-      <form id="authForm">
+      <div class="segmented" id="authTabs"><button class="seg active" data-auth="login">Logowanie</button><button class="seg" data-auth="register">Rejestracja</button></div>
+      <form id="authForm" class="stack-form">
         <label>E-mail<input id="authEmail" type="email" autocomplete="email" required placeholder="twoj@email.pl" /></label>
         <label>Hasło<input id="authPassword" type="password" minlength="6" autocomplete="current-password" required placeholder="minimum 6 znaków" /></label>
         <button class="primary wide" type="submit" id="authSubmit">Zaloguj się</button>
       </form>
-      <button id="forgotPassword" class="link-btn">Nie pamiętasz hasła?</button>
-      
+      <button id="forgotPassword" class="link-btn center-btn">Nie pamiętasz hasła?</button>
     </div>
   </section>
 
   <main id="appView" class="app hidden">
     <header class="topbar">
-      <div>
-        <span class="eyebrow">AKTYWNY SAMOCHÓD</span>
-        <button id="carSwitcher" class="car-switcher">Dodaj samochód ▾</button>
-      </div>
-      <button id="pointsChip" class="points-chip">⭐ <span id="pointsValue">0</span></button>
+      <button id="carSwitcher" class="car-switcher"><span class="car-dot">●</span><span id="carSwitcherText">Dodaj samochód</span><span>⌄</span></button>
+      <button id="pointsChip" class="points-chip" aria-label="Punkty"><span class="wallet-icon">◫</span><strong id="pointsValue">0</strong><small>pkt</small></button>
     </header>
 
-    <section id="installBanner" class="install-banner hidden">
-      <div><strong>Dodaj Tanko do ekranu głównego</strong><span>Otwieraj jak zwykłą aplikację.</span></div>
-      <div class="inline-actions"><button id="installBtn" class="small-primary">Dodaj</button><button id="installDismiss" class="icon-btn">✕</button></div>
-    </section>
-
-    <section id="locationBanner" class="permission-banner">
-      <div><strong>Włącz lokalizację</strong><span>Potrzebujemy GPS, aby pokazać stacje w pobliżu i policzyć koszt dojazdu.</span></div>
-      <button id="enableLocation" class="small-primary">Włącz GPS</button>
-    </section>
+    <section id="installBanner" class="install-banner hidden"><div><strong>Dodaj Tanko do ekranu głównego</strong><span>Szybszy dostęp i pełny tryb aplikacji.</span></div><div class="inline-actions"><button id="installBtn" class="small-primary">Dodaj</button><button id="installDismiss" class="icon-btn">✕</button></div></section>
+    <section id="locationBanner" class="permission-banner"><div><strong>Włącz lokalizację</strong><span>Pokażemy stacje w pobliżu i policzymy rzeczywisty koszt dojazdu.</span></div><button id="enableLocation" class="small-primary">Włącz GPS</button></section>
 
     <section id="homeScreen" class="screen active">
-      <div class="fuel-picker" id="fuelPicker">
-        <button class="fuel active" data-fuel="pb95">PB95</button>
-        <button class="fuel" data-fuel="pb98">PB98</button>
-        <button class="fuel" data-fuel="on">ON</button>
-        <button class="fuel" data-fuel="lpg">LPG</button>
-      </div>
+      <div class="fuel-picker" id="fuelPicker"><button class="fuel active" data-fuel="pb95">95</button><button class="fuel" data-fuel="pb98">98</button><button class="fuel" data-fuel="on">ON</button><button class="fuel" data-fuel="lpg">LPG</button></div>
+
+      <button id="routeHero" class="route-hero">
+        <div class="route-graphic"><div class="route-line"></div><div class="route-car">🚗</div><div class="route-pin">●</div></div>
+        <div><span class="eyebrow">TRYB TRASY</span><strong>Gdzie jedziesz?</strong><small>Znajdź najlepsze tankowanie po drodze</small></div><span class="route-arrow">›</span>
+      </button>
 
       <div class="hero-card">
-        <div class="hero-head"><div><span class="eyebrow">NAJLEPSZE TANKOWANIE</span><h2 id="bestStationName">Dodaj samochód</h2></div><span id="bestFreshness" class="confidence neutral">—</span></div>
+        <div class="hero-head"><div><span class="eyebrow">NAJBARDZIEJ OPŁACALNE</span><h2 id="bestStationName">Brak danych</h2></div><button id="bestFavorite" class="favorite-btn" aria-label="Ulubiona stacja">☆</button></div>
         <div class="price-row"><strong id="bestPrice">—</strong><span>zł/l</span></div>
-        <div class="stats-grid">
-          <div><span>Odległość</span><strong id="bestDistance">—</strong></div>
-          <div><span>Przy 45 l</span><strong id="bestSaving">—</strong></div>
-        </div>
-        <div id="worthBadge" class="worth neutral">Dodaj samochód i zezwól na lokalizację</div>
-        <button id="navigateBest" class="primary wide">Nawiguj</button>
+        <div class="stats-grid"><div><span>Odległość</span><strong id="bestDistance">—</strong></div><div><span>Oszczędność</span><strong id="bestSaving">—</strong></div><div><span>Wiarygodność</span><strong id="bestConfidence">—</strong></div></div>
+        <div id="worthBadge" class="worth neutral">Wczytaj lokalizację i ceny.</div>
+        <div class="hero-actions"><button id="navigateBest" class="primary">Nawiguj</button><button id="openBestDetails" class="secondary">Szczegóły</button></div>
       </div>
 
-      <div class="section-title"><div><span class="eyebrow">RANKING</span><h3>TOP 3 najbardziej opłacalne</h3></div><button id="showAllMap" class="link-btn">Mapa</button></div>
+      <div class="section-title"><div><span class="eyebrow">TOP 3</span><h3>Najlepsze stacje teraz</h3></div><button id="showAllMap" class="link-btn">Pokaż mapę</button></div>
       <div id="topStations" class="station-list"></div>
 
-      <div class="quick-card">
-        <div><span class="eyebrow">SZYBKA KALKULACJA</span><h3>Ile chcesz zatankować?</h3></div>
-        <div class="liter-control"><button id="minusLiters">−</button><strong><span id="litersValue">45</span> l</strong><button id="plusLiters">+</button></div>
-      </div>
+      <div class="section-title"><div><span class="eyebrow">SZYBKI DOSTĘP</span><h3>Ulubione</h3></div></div>
+      <div id="favoritePreview" class="horizontal-list"></div>
+
+      <div class="quick-card"><div><span class="eyebrow">KALKULATOR</span><h3>Planowane tankowanie</h3><small>Wyniki liczymy dla tej ilości paliwa.</small></div><div class="liter-control"><button id="minusLiters">−</button><strong><span id="litersValue">45</span> l</strong><button id="plusLiters">+</button></div></div>
     </section>
 
     <section id="mapScreen" class="screen">
-      <div class="section-title"><div><span class="eyebrow">W POBLIŻU</span><h3>Mapa stacji</h3></div><button id="centerMap" class="small-secondary">Moja pozycja</button></div>
-      <div id="map"></div>
-      <div class="map-legend"><span><i class="dot fresh"></i> świeża cena</span><span><i class="dot stale"></i> stara cena</span></div>
+      <div class="section-title sticky-title"><div><span class="eyebrow">W POBLIŻU</span><h3>Mapa stacji</h3></div><div class="inline-actions"><button id="addStationBtn" class="small-secondary">+ Stacja</button><button id="centerMap" class="small-secondary">◎</button></div></div>
+      <div class="map-wrap"><div id="map"></div><button id="mapRouteFab" class="map-route-fab">🚗 <span>Trasa</span></button></div>
+      <div id="mapStatus" class="map-status">Ładowanie stacji…</div>
+      <div class="map-legend"><span><i class="dot fresh"></i>świeża</span><span><i class="dot stale"></i>starsza</span><span><i class="dot unknown"></i>brak ceny</span></div>
     </section>
 
     <section id="addScreen" class="screen">
-      <div class="capture-card">
-        <div class="camera-icon">📷</div>
-        <h2>Zaktualizuj ceny</h2>
-        <p>Stań w pobliżu stacji i zrób zdjęcie pylonu. Aplikacja rozpozna ceny, a Ty tylko je potwierdzisz.</p>
-        <label class="camera-btn">Zrób zdjęcie<input id="pylonPhoto" type="file" accept="image/*" capture="environment" hidden /></label>
-        <button id="manualPriceBtn" class="secondary wide">Wpisz cenę ręcznie</button>
-      </div>
-      <div id="ocrPanel" class="ocr-panel hidden">
-        <span class="eyebrow">ROZPOZNANE CENY</span>
-        <h3>Sprawdź przed zapisaniem</h3>
-        <div id="ocrFields"></div>
-        <button id="savePrices" class="primary wide">Potwierdź i zdobądź punkty</button>
-      </div>
+      <div class="capture-card"><div class="camera-ring">⌾</div><span class="eyebrow">DODAJ CENĘ</span><h2>Zeskanuj pylon</h2><p>Zrób wyraźne zdjęcie. OCR odczyta cyfry, a przed zapisem zawsze pokażemy Ci wynik do sprawdzenia.</p><label class="camera-btn">Otwórz aparat<input id="pylonPhoto" type="file" accept="image/*" capture="environment" hidden /></label><button id="manualPriceBtn" class="secondary wide">Wpisz ręcznie</button></div>
+      <div id="ocrPanel" class="ocr-panel hidden"><span class="eyebrow">ODCZYT ZE ZDJĘCIA</span><h3>Sprawdź wynik</h3><img id="photoPreview" class="photo-preview hidden" alt="Zdjęcie pylonu" /><div id="ocrStatus" class="ocr-status hidden"></div><label>Stacja<select id="reportStation"></select></label><div id="ocrFields"></div><details id="ocrRawWrap" class="ocr-raw hidden"><summary>Tekst rozpoznany przez OCR</summary><pre id="ocrRawText"></pre></details><button id="savePrices" class="primary wide">Zapisz ceny</button></div>
     </section>
 
     <section id="rankingScreen" class="screen">
-      <div class="section-title"><div><span class="eyebrow">SPOŁECZNOŚĆ</span><h3>Ranking użytkowników</h3></div></div>
-      <div class="segmented rank-tabs"><button class="seg active">Miesiąc</button><button class="seg">Cały czas</button></div>
+      <div class="section-title"><div><span class="eyebrow">SPOŁECZNOŚĆ</span><h3>Ranking kierowców</h3></div></div>
+      <div id="myRankCard" class="my-rank-card"></div>
       <div id="rankingList" class="ranking-list"></div>
-      <div class="rewards-card"><span class="eyebrow">PUNKTY</span><h3>Nagrody pojawią się wkrótce</h3><p>Zbieraj punkty za zdjęcia pylonów i potwierdzanie aktualnych cen. Punkty zachowasz, gdy uruchomimy nagrody.</p></div>
+      <div class="rewards-card"><span class="eyebrow">PUNKTY</span><h3>Nagrody za uzbierane punkty pojawią się wkrótce</h3><p>Zdjęcia pylonów i potwierdzanie cen budują Twoją pozycję w rankingu. Punkty pozostają na koncie.</p></div>
     </section>
 
     <section id="profileScreen" class="screen">
-      <div class="profile-head"><div class="avatar">👤</div><div><span class="eyebrow">PROFIL</span><h3 id="profileEmail">Użytkownik</h3></div></div>
-      <div class="section-title"><div><h3>Twoje samochody</h3></div><button id="addCarBtn" class="small-primary">+ Dodaj</button></div>
-      <div id="carsList" class="cars-list"></div>
-      <div class="settings-card">
-        <button id="changeFuel">⛽ Domyślne paliwo <span id="defaultFuelLabel">PB95</span></button>
-        <button id="changeLocation">📍 Lokalizacja <span id="locationStatus">wyłączona</span></button>
-        <button id="logoutBtn">↩ Wyloguj</button>
-      </div>
+      <div class="profile-head"><div class="avatar" id="profileAvatar">T</div><div><span class="eyebrow">PROFIL</span><h3 id="profileEmail">Użytkownik</h3><small id="profileReputation">Reputacja 1.00</small></div><button id="adminEntry" class="admin-chip hidden">Admin</button></div>
+      <div class="section-title"><div><h3>Twoje samochody</h3></div><button id="addCarBtn" class="small-primary">+ Dodaj</button></div><div id="carsList" class="cars-list"></div>
+      <div class="section-title"><div><h3>Ulubione stacje</h3></div></div><div id="profileFavorites" class="favorites-list"></div>
+      <div class="settings-card"><button id="soundToggle">🔊 Dźwięki aplikacji <span id="soundState">włączone</span></button><button id="showTutorial">✨ Pokaż samouczek <span>›</span></button><button id="changeLocation">📍 Lokalizacja <span id="locationStatus">wyłączona</span></button><button id="logoutBtn">↩ Wyloguj</button></div>
     </section>
 
-    <nav class="bottom-nav">
-      <button class="nav-btn active" data-screen="homeScreen"><span>⌂</span><small>Start</small></button>
-      <button class="nav-btn" data-screen="mapScreen"><span>⌖</span><small>Mapa</small></button>
-      <button class="nav-btn add-nav" data-screen="addScreen"><span>＋</span><small>Dodaj</small></button>
-      <button class="nav-btn" data-screen="rankingScreen"><span>♛</span><small>Ranking</small></button>
-      <button class="nav-btn" data-screen="profileScreen"><span>●</span><small>Profil</small></button>
-    </nav>
+    <nav class="bottom-nav"><button class="nav-btn active" data-screen="homeScreen"><span>⌂</span><small>Start</small></button><button class="nav-btn" data-screen="mapScreen"><span>⌖</span><small>Mapa</small></button><button class="nav-btn add-nav" data-screen="addScreen"><span>＋</span><small>Dodaj</small></button><button class="nav-btn" data-screen="rankingScreen"><span>♛</span><small>Ranking</small></button><button class="nav-btn" data-screen="profileScreen"><span>●</span><small>Profil</small></button></nav>
   </main>
 
-  <dialog id="carDialog">
-    <form method="dialog" id="carForm" class="dialog-form">
-      <div class="dialog-head"><h3>Dodaj samochód</h3><button class="icon-btn" value="cancel">✕</button></div>
-      <label>Nazwa auta<input id="carName" required placeholder="np. Audi A4 B6" /></label>
-      <label>Silnik<input id="carEngine" placeholder="np. 1.8T" /></label>
-      <label>Rodzaj paliwa<select id="carFuel"><option value="pb95">PB95</option><option value="pb98">PB98</option><option value="on">ON</option><option value="lpg">LPG</option></select></label>
-      <label>Średnie spalanie (l/100 km)<input id="carConsumption" type="number" step="0.1" min="1" max="40" required placeholder="np. 9.0" /></label>
-      <button class="primary wide" value="default" type="submit">Zapisz samochód</button>
-    </form>
-  </dialog>
+  <dialog id="onboardingDialog" class="fullscreen-dialog"><div class="onboarding"><button id="skipOnboarding" class="onboarding-skip">Pomiń</button><div id="onboardingSlides" class="slides"></div><div class="onboarding-footer"><div id="onboardingDots" class="dots"></div><button id="onboardingNext" class="primary">Dalej</button></div></div></dialog>
 
-  <dialog id="carPickerDialog">
-    <div class="dialog-form"><div class="dialog-head"><h3>Wybierz samochód</h3><button class="icon-btn" id="closeCarPicker">✕</button></div><div id="carPickerList" class="cars-list"></div></div>
-  </dialog>
-
-  <dialog id="resetDialog">
-    <form id="resetRequestForm" class="dialog-form">
-      <div class="dialog-head"><h3>Reset hasła</h3><button class="icon-btn" type="button" id="closeReset">✕</button></div>
-      <p>Podaj adres e-mail przypisany do konta. Wyślemy Ci bezpieczny link do ustawienia nowego hasła.</p>
-      <label>E-mail<input id="resetEmail" type="email" autocomplete="email" required placeholder="twoj@email.pl" /></label>
-      <button class="primary wide" type="submit" id="sendResetLink">Wyślij link</button>
-    </form>
-  </dialog>
+  <dialog id="carDialog"><form method="dialog" id="carForm" class="dialog-form"><div class="dialog-head"><h3>Dodaj samochód</h3><button class="icon-btn" value="cancel">✕</button></div><label>Nazwa auta<input id="carName" required placeholder="np. Audi A4 B6" /></label><label>Silnik<input id="carEngine" placeholder="np. 1.8T" /></label><label>Rodzaj paliwa<select id="carFuel"><option value="pb95">PB95</option><option value="pb98">PB98</option><option value="on">ON</option><option value="lpg">LPG</option></select></label><label>Średnie spalanie<input id="carConsumption" type="number" step="0.1" min="1" max="40" required placeholder="np. 9.0" /></label><button class="primary wide" value="default" type="submit">Zapisz samochód</button></form></dialog>
+  <dialog id="carPickerDialog"><div class="dialog-form"><div class="dialog-head"><h3>Wybierz samochód</h3><button class="icon-btn" id="closeCarPicker">✕</button></div><div id="carPickerList" class="cars-list"></div></div></dialog>
+  <dialog id="stationDialog"><form method="dialog" id="stationForm" class="dialog-form"><div class="dialog-head"><h3>Dodaj stację</h3><button class="icon-btn" value="cancel">✕</button></div><p>Wpisz nazwę i ustaw współrzędne stacji.</p><label>Nazwa<input id="stationName" required placeholder="np. ORLEN" /></label><label>Adres<input id="stationAddress" placeholder="np. Poznańska 12, Jarocin" /></label><div class="coord-grid"><label>Szerokość<input id="stationLat" type="number" step="0.000001" required /></label><label>Długość<input id="stationLng" type="number" step="0.000001" required /></label></div><button class="primary wide" value="default" type="submit">Dodaj stację</button></form></dialog>
+  <dialog id="stationDetailsDialog"><div class="dialog-form station-details"><div class="dialog-head"><h3 id="detailsName">Stacja</h3><button class="icon-btn" id="closeStationDetails">✕</button></div><div id="detailsBody"></div><canvas id="priceChart" height="180"></canvas><div class="dialog-actions"><button id="detailsFavorite" class="secondary">☆ Ulubiona</button><button id="detailsReport" class="secondary">Zgłoś problem</button><button id="detailsNavigate" class="primary">Nawiguj</button></div></div></dialog>
+  <dialog id="favoriteNotifyDialog"><div class="dialog-form"><div class="notify-illustration">★</div><div class="dialog-head"><h3>Powiadomienia tej stacji?</h3></div><p>Możemy poinformować Cię, gdy ktoś doda nową cenę na tej ulubionej stacji.</p><button id="enableFavoriteNotify" class="primary wide">Włącz powiadomienia</button><button id="skipFavoriteNotify" class="secondary wide">Nie teraz</button></div></dialog>
+  <dialog id="reportDialog"><form id="reportForm" class="dialog-form"><div class="dialog-head"><h3>Zgłoś problem</h3><button class="icon-btn" type="button" id="closeReport">✕</button></div><label>Problem<select id="reportCategory"><option value="closed">Stacja zamknięta</option><option value="wrong_name">Błędna nazwa</option><option value="wrong_location">Zła lokalizacja</option><option value="missing_fuel">Brak rodzaju paliwa</option><option value="duplicate">Duplikat stacji</option><option value="other">Inne</option></select></label><label>Dodatkowa informacja<textarea id="reportMessage" rows="4" placeholder="Opcjonalnie opisz problem"></textarea></label><button class="primary wide" type="submit">Wyślij zgłoszenie</button></form></dialog>
+  <dialog id="routeDialog"><div class="dialog-form route-dialog"><div class="dialog-head"><h3>Tankowanie na trasie</h3><button class="icon-btn" id="closeRoute">✕</button></div><div class="route-inputs"><label>Start<input id="routeStart" value="Moja lokalizacja" disabled /></label><label>Dokąd jedziesz?<input id="routeDestination" placeholder="np. Poznań, Stary Rynek" /></label></div><button id="calculateRoute" class="primary wide">Znajdź najlepsze tankowanie</button><div id="routeResult" class="route-result"></div></div></dialog>
+  <dialog id="adminDialog"><div class="dialog-form admin-dialog"><div class="dialog-head"><div><span class="eyebrow">PANEL ADMINA</span><h3>Skrzynka zgłoszeń</h3></div><button class="icon-btn" id="closeAdmin">✕</button></div><div class="admin-filters"><button class="seg active" data-status="new">Nowe</button><button class="seg" data-status="in_progress">W toku</button><button class="seg" data-status="resolved">Zakończone</button></div><div id="adminReports" class="admin-reports"></div></div></dialog>
+  <dialog id="resetDialog"><form id="resetRequestForm" class="dialog-form"><div class="dialog-head"><h3>Reset hasła</h3><button class="icon-btn" type="button" id="closeReset">✕</button></div><p>Wyślemy Ci link do ustawienia nowego hasła.</p><label>E-mail<input id="resetEmail" type="email" autocomplete="email" required /></label><button class="primary wide" type="submit">Wyślij link</button></form></dialog>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>

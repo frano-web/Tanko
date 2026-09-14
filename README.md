@@ -1,62 +1,69 @@
-# Tankuj – MVP PWA
+# Tanko 1.0
 
-Mobilna aplikacja webowa do wyszukiwania najbardziej opłacalnej stacji paliw.
+Mobilna aplikacja PWA hostowana na GitHub Pages, z Supabase jako backendem.
 
-## Co już działa
-- mobilny interfejs PWA,
-- ekran logowania/rejestracji,
-- tryb demo bez backendu,
-- gotowość pod Supabase Auth,
-- reset hasła przez e-mail po podłączeniu Supabase,
-- prośba o GPS i obliczanie odległości,
-- kilka samochodów + szybkie przełączanie,
-- wybór PB95/PB98/ON/LPG,
-- ranking TOP 3 uwzględniający cenę, koszt dojazdu i spalanie,
-- mapa Leaflet/OpenStreetMap,
-- formularz aktualizacji cen ze zdjęcia,
-- punkty i ranking,
-- baner instalacji PWA,
-- Service Worker / działanie instalowalne.
+## 1. Wgraj pliki na GitHub Pages
+Podmień całą zawartość repozytorium `Tanko` plikami z tego folderu. Nie pomijaj `sw.js`, bo zmieniono wersję cache.
 
-## Ważne
-OCR zdjęcia pylonu jest w tej wersji **symulowany**. Po wybraniu zdjęcia aplikacja pokazuje formularz rozpoznanych cen. Kolejny etap to podpięcie Google Cloud Vision / innego OCR przez bezpieczną funkcję serwerową, żeby klucz API nie znalazł się w przeglądarce.
+## 2. Uruchom migrację Supabase
+Supabase → SQL Editor → New query → wklej CAŁY `supabase.sql` → Run.
 
-## Podłączenie Supabase
-1. Utwórz projekt w Supabase.
-2. W SQL Editor uruchom `supabase.sql`.
-3. W Authentication -> URL Configuration ustaw Site URL na adres aplikacji (np. GitHub Pages).
-4. W `config.js` wpisz `SUPABASE_URL` i publiczny `anon key`.
-5. W Authentication włącz provider Email.
-6. Ustaw własny szablon wiadomości resetującej hasło, jeśli chcesz.
+Migracja dodaje:
+- trwałe samochody użytkownika,
+- ulubione stacje,
+- preferencje powiadomień,
+- historię cen,
+- reputację użytkownika,
+- zgłoszenia błędów stacji,
+- rolę administratora i skrzynkę zgłoszeń,
+- onboarding i ustawienie dźwięków,
+- punktację naliczaną po stronie bazy.
 
-## Uruchomienie lokalne
-Nie otwieraj `index.html` bezpośrednio jako `file://`, bo GPS/PWA wymagają bezpiecznego kontekstu. Uruchom prosty serwer:
+## 3. Nadaj sobie administratora
+Po uruchomieniu migracji wykonaj osobne zapytanie, podając e-mail konta, które ma być adminem:
 
-```bash
-python -m http.server 8080
+```sql
+update public.profiles
+set role = 'admin'
+where id = (select id from auth.users where email = 'TU_WPISZ_EMAIL_ADMINA');
 ```
 
-Następnie wejdź na `http://localhost:8080`.
+Po ponownym zalogowaniu w profilu pojawi się przycisk **Admin**.
 
-## GitHub Pages
-Wrzuć wszystkie pliki do repozytorium i w Settings -> Pages wybierz deploy z gałęzi `main`.
+## 4. Authentication → URL Configuration
+Site URL:
+`https://frano-web.github.io/Tanko/`
 
-## Co zrobić przed publicznym testem
-- zaimportować prawdziwą bazę stacji,
-- podpiąć realny OCR,
-- walidować GPS przy zgłoszeniu ceny,
-- dodać mechanizm potwierdzania/odrzucania podejrzanych zmian,
-- przenieść naliczanie punktów na backend (nie w JS),
-- dodać ograniczenia antyspamowe,
-- zapisać samochody w Supabase zamiast tylko localStorage,
-- dodać politykę prywatności i regulamin.
+Redirect URLs:
+- `https://frano-web.github.io/Tanko/`
+- `https://frano-web.github.io/Tanko/reset-password.html`
+- `https://frano-web.github.io/Tanko/**`
 
-## Logowanie i kody e-mail
-Aplikacja używa kodów OTP w wiadomościach e-mail zamiast linków potwierdzających.
-W Supabase zmień szablony `Confirm signup` oraz `Reset password`, tak aby zawierały `{{ .Token }}` zamiast `{{ .ConfirmationURL }}`.
+## 5. Co działa w tej wersji
+- logowanie, rejestracja i reset hasła przez link,
+- samochody zapisane w Supabase + aktywne auto,
+- mapa OpenStreetMap i import pobliskich stacji przez Overpass,
+- ręczne dodawanie brakującej stacji,
+- OCR pylonu przez Tesseract.js bez losowych cen,
+- TOP 3 opłacalnych stacji z kosztem dojazdu,
+- poziom wiarygodności ceny,
+- ulubione stacje,
+- pytanie o powiadomienia po dodaniu ulubionej,
+- historia ceny z 30 dni,
+- ranking wyłącznie prawdziwych kont,
+- punkty, reputacja i animacja portfela,
+- zgłoszenia błędów do skrzynki administratora,
+- tryb trasy z OSRM + Nominatim,
+- onboarding z animacjami,
+- dźwięki aplikacji z przełącznikiem,
+- nowa ikona PWA inspirowana kontrolką rezerwy.
 
+## Ważne o powiadomieniach
+W tej wersji powiadomienie o nowej cenie ulubionej stacji działa przez Supabase Realtime, gdy PWA/aplikacja ma aktywną sesję w przeglądarce. Prawdziwe powiadomienia push działające po całkowitym zamknięciu aplikacji wymagają później Web Push + zapisu `PushSubscription` + funkcji backendowej/Edge Function.
 
-## Logowanie i reset hasła przez link
-- Potwierdzenie rejestracji wraca do `https://frano-web.github.io/Tanko/`.
-- Reset hasła wraca do `https://frano-web.github.io/Tanko/reset-password.html`.
-- W Supabase dodaj oba adresy do Authentication → URL Configuration → Redirect URLs.
+## Źródła map i trasy
+- mapa/stacje: OpenStreetMap + Overpass
+- trasy: publiczny OSRM
+- wyszukiwanie celu: Nominatim
+
+Do produkcji przy większym ruchu warto przejść z publicznych endpointów na własny/komercyjny routing/geocoding, żeby nie zależeć od limitów usług społecznościowych.

@@ -1,269 +1,120 @@
-const CONFIG = window.APP_CONFIG || {};
-const hasSupabase = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY && window.supabase);
-const sb = hasSupabase ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY) : null;
-const APP_URL = 'https://frano-web.github.io/Tanko/';
-const RESET_URL = 'https://frano-web.github.io/Tanko/reset-password.html';
+const CONFIG=window.APP_CONFIG||{};
+const sb=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);
+const APP_URL='https://frano-web.github.io/Tanko/';
+const RESET_URL=APP_URL+'reset-password.html';
+const JAROCIN={lat:51.9727,lng:17.5026};
+const $=id=>document.getElementById(id);
+const FUEL_LABEL={pb95:'PB95',pb98:'PB98',on:'ON',lpg:'LPG'};
+const state={user:null,profile:null,cars:[],activeCarId:null,fuel:localStorage.getItem('tanko_fuel')||'pb95',liters:Number(localStorage.getItem('tanko_liters')||45),location:null,stations:[],favorites:new Map(),ranking:[],map:null,markers:[],deferredInstall:null,authMode:'login',photoFile:null,ocrSource:'photo',selectedStation:null,selectedFavoriteStation:null,chart:null,onboardingIndex:0,adminStatus:'new',realtime:null};
+let audioCtx=null;
 
-const $ = (id) => document.getElementById(id);
-const state = {
-  user: null,
-  fuel: localStorage.getItem('fuel') || 'pb95',
-  liters: Number(localStorage.getItem('liters') || 45),
-  location: null,
-  cars: JSON.parse(localStorage.getItem('cars') || '[]'),
-  activeCarId: localStorage.getItem('activeCarId'),
-  points: Number(localStorage.getItem('points') || 120),
-  map: null,
-  markers: [],
-  deferredInstall: null,
-  authMode: 'login'
-};
+function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),2600)}
+function savePrefs(){localStorage.setItem('tanko_fuel',state.fuel);localStorage.setItem('tanko_liters',state.liters)}
+function fuelLabel(v){return FUEL_LABEL[v]||String(v).toUpperCase()}
+function fmt(v){return v==null||!isFinite(Number(v))?'—':Number(v).toFixed(2).replace('.',',')}
+function activeCar(){return state.cars.find(c=>String(c.id)===String(state.activeCarId))||state.cars.find(c=>c.is_active)||state.cars[0]||null}
+function ageHours(ts){return ts?(Date.now()-new Date(ts).getTime())/36e5:Infinity}
+function humanAge(ts){if(!ts)return'brak aktualnej ceny';const m=Math.max(0,Math.round((Date.now()-new Date(ts))/60000));if(m<60)return`${m} min temu`;const h=Math.round(m/60);if(h<48)return`${h} godz. temu`;return`${Math.round(h/24)} dni temu`}
+function hav(a,b){const R=6371,d1=(b.lat-a.lat)*Math.PI/180,d2=(b.lng-a.lng)*Math.PI/180,l1=a.lat*Math.PI/180,l2=b.lat*Math.PI/180;const q=Math.sin(d1/2)**2+Math.cos(l1)*Math.cos(l2)*Math.sin(d2/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
+function stationDistance(s){return hav(state.location||JAROCIN,{lat:s.lat,lng:s.lng})}
+function confidence(s){const h=ageHours(s.updatedAt);let score=0;if(h<3)score+=55;else if(h<24)score+=42;else if(h<72)score+=25;else score+=7;if(s.priceSource==='photo')score+=25;else if(s.priceSource==='partner')score+=30;else if(s.priceSource==='confirmation')score+=15;else score+=8;score+=Math.min(20,(s.confirmations||0)*5);if(score>=75)return{label:'wysoka',cls:'high',score};if(score>=45)return{label:'średnia',cls:'mid',score};return{label:'niska',cls:'low',score}}
+function playSound(type='tap'){if(!state.profile?.sounds_enabled)return;try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);const map={tap:[420,.045],success:[690,.10],coin:[880,.16],error:[180,.12]};const [f,d]=map[type]||map.tap;o.frequency.setValueAtTime(f,audioCtx.currentTime);if(type==='coin')o.frequency.exponentialRampToValueAtTime(1220,audioCtx.currentTime+d);g.gain.setValueAtTime(.06,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+d);o.start();o.stop(audioCtx.currentTime+d)}catch(e){}}
+function awardAnimation(delta){if(delta<=0)return;const b=$('pointsBurst');b.querySelector('span').textContent=`+${delta}`;b.classList.remove('hidden');b.style.animation='none';void b.offsetWidth;b.style.animation='burst .9s ease';playSound('coin');navigator.vibrate?.(30);setTimeout(()=>b.classList.add('hidden'),900)}
 
-// Dane startowe interfejsu; połączenie z bazą może je zastąpić danymi stacji.
-let stations = [
-  {id:1,name:'MOYA',address:'Jarocin',lat:51.9732,lng:17.5067,prices:{pb95:5.94,pb98:6.39,on:5.99,lpg:2.89},updatedAt:Date.now()-18*60000,confirmations:4},
-  {id:2,name:'ORLEN',address:'Jarocin',lat:51.9688,lng:17.4958,prices:{pb95:5.99,pb98:6.44,on:6.04,lpg:2.92},updatedAt:Date.now()-58*60000,confirmations:7},
-  {id:3,name:'Shell',address:'Jarocin',lat:51.9617,lng:17.5195,prices:{pb95:6.04,pb98:6.49,on:6.09,lpg:2.95},updatedAt:Date.now()-8*3600000,confirmations:2},
-  {id:4,name:'Circle K',address:'Jarocin',lat:51.9821,lng:17.4824,prices:{pb95:6.09,pb98:6.55,on:6.11,lpg:2.97},updatedAt:Date.now()-31*3600000,confirmations:1},
-  {id:5,name:'Stacja niezależna',address:'okolice Jarocina',lat:51.9915,lng:17.5330,prices:{pb95:5.91,pb98:6.35,on:5.97,lpg:2.86},updatedAt:Date.now()-74*3600000,confirmations:1}
+function normalizeStation(r){return{id:r.id,name:r.name,address:r.address||'',lat:Number(r.latitude),lng:Number(r.longitude),brand:r.brand||'',externalId:r.external_id||'',photo:r.photo_url||'',prices:{pb95:r.pb95==null?null:Number(r.pb95),pb98:r.pb98==null?null:Number(r.pb98),on:r.on_price==null?null:Number(r.on_price),lpg:r.lpg==null?null:Number(r.lpg)},updatedAt:r.price_updated_at,latestReportId:r.latest_report_id,priceSource:r.price_source,confirmations:Number(r.confirmations||0)}}
+function calcStations(){const pos=state.location||JAROCIN,car=activeCar();const rows=state.stations.filter(s=>Number(s.prices[state.fuel])>0).map(s=>{const distance=hav(pos,{lat:s.lat,lng:s.lng}),price=Number(s.prices[state.fuel]),travel=car?distance*2*Number(car.consumption)/100*price:0;return{...s,distance,price,travel,conf:confidence(s)}});const nearest=[...rows].sort((a,b)=>a.distance-b.distance)[0];const baseline=nearest?nearest.price*state.liters:0;return rows.map(s=>{const total=s.price*state.liters+s.travel,saving=baseline-total;return{...s,total,saving,rankScore:total+(100-s.conf.score)*.006}}).sort((a,b)=>a.rankScore-b.rankScore)}
+
+function renderHome(){document.querySelectorAll('.fuel').forEach(b=>b.classList.toggle('active',b.dataset.fuel===state.fuel));$('litersValue').textContent=state.liters;$('pointsValue').textContent=state.profile?.points||0;const car=activeCar();$('carSwitcherText').textContent=car?`${car.name}${car.engine?' · '+car.engine:''}`:'Dodaj samochód';const ranked=calcStations(),best=ranked[0];if(!best){$('bestStationName').textContent='Brak aktualnych cen';$('bestPrice').textContent='—';$('bestDistance').textContent='—';$('bestSaving').textContent='—';$('bestConfidence').textContent='—';$('worthBadge').textContent='Na mapie zobaczysz stacje. Dodaj pierwszą aktualną cenę, aby uruchomić ranking.';$('topStations').innerHTML='<div class="empty-card">Brak aktualnych cen dla wybranego paliwa.</div>';$('bestFavorite').classList.remove('active');$('favoritePreview').innerHTML=renderFavoriteMini();return}
+state.selectedStation=best;$('bestStationName').textContent=best.name;$('bestPrice').textContent=fmt(best.price);$('bestDistance').textContent=`${best.distance.toFixed(1).replace('.',',')} km`;$('bestSaving').textContent=best.saving>0?`${best.saving.toFixed(2).replace('.',',')} zł`:'0,00 zł';$('bestConfidence').textContent=best.conf.label;$('bestFavorite').classList.toggle('active',state.favorites.has(String(best.id)));$('bestFavorite').textContent=state.favorites.has(String(best.id))?'★':'☆';const w=$('worthBadge');if(!car){w.className='worth neutral';w.textContent='Dodaj samochód, aby uwzględnić koszt dojazdu.'}else if(best.saving>5){w.className='worth good';w.textContent=`Warto jechać — realna oszczędność ok. ${best.saving.toFixed(2).replace('.',',')} zł.`}else if(best.saving>1){w.className='worth ok';w.textContent='Oszczędność jest niewielka, ale nadal dodatnia.'}else{w.className='worth bad';w.textContent='Nie warto nadrabiać drogi tylko dla tej ceny.'}
+$('topStations').innerHTML=ranked.slice(0,3).map((s,i)=>`<button class="station-card open-station" data-id="${s.id}"><div class="station-rank">${i+1}</div><div class="station-main"><strong>${esc(s.name)}</strong><span>${s.distance.toFixed(1).replace('.',',')} km · ${humanAge(s.updatedAt)}</span><span><i class="confidence-dot confidence-${s.conf.cls}"></i>${s.conf.label} wiarygodność</span></div><div class="station-price"><strong>${fmt(s.price)}</strong><span>zł/l</span></div></button>`).join('');$('favoritePreview').innerHTML=renderFavoriteMini()}
+function renderFavoriteMini(){const favs=[...state.favorites.values()].map(f=>state.stations.find(s=>String(s.id)===String(f.station_id))).filter(Boolean);if(!favs.length)return'<div class="empty-card" style="min-width:100%">Dodaj gwiazdką stacje, do których często wracasz.</div>';return favs.slice(0,6).map(s=>`<button class="favorite-mini open-station" data-id="${s.id}"><strong>★ ${esc(s.name)}</strong><span>${esc(s.address||'')}</span><b>${fmt(s.prices[state.fuel])} <small>zł/l</small></b></button>`).join('')}
+function renderCars(){const car=activeCar();$('carsList').innerHTML=state.cars.length?state.cars.map(c=>`<div class="car-row ${String(car?.id)===String(c.id)?'active-car':''}"><div class="car-icon">🚗</div><div class="car-copy"><strong>${esc(c.name)}</strong><span>${esc(c.engine||'')} · ${fuelLabel(c.fuel)} · ${Number(c.consumption).toFixed(1)} l/100 km</span></div><div class="car-actions"><button class="choose-car" data-id="${c.id}">${String(car?.id)===String(c.id)?'Aktywne':'Wybierz'}</button><button class="remove-car" data-id="${c.id}">Usuń</button></div></div>`).join(''):'<div class="empty-card">Dodaj pierwszy samochód. Zostanie zapisany na koncie i będzie dostępny po każdym logowaniu.</div>';$('carPickerList').innerHTML=state.cars.map(c=>`<button class="car-row pick-car" data-id="${c.id}"><div class="car-icon">🚗</div><div class="car-copy"><strong>${esc(c.name)}</strong><span>${esc(c.engine||'')} · ${Number(c.consumption).toFixed(1)} l/100 km</span></div><span>›</span></button>`).join('')||'<div class="empty-card">Brak samochodów.</div>'}
+function renderFavoritesProfile(){const arr=[...state.favorites.values()];$('profileFavorites').innerHTML=arr.length?arr.map(f=>{const s=state.stations.find(x=>String(x.id)===String(f.station_id));if(!s)return'';return`<div class="favorite-row"><div class="favorite-copy"><strong>★ ${esc(s.name)}</strong><span>${esc(s.address)} · ${f.notify_new_price?'powiadomienia włączone':'powiadomienia wyłączone'}</span></div><div class="favorite-actions"><button class="fav-notify" data-id="${s.id}">${f.notify_new_price?'🔔':'🔕'}</button><button class="fav-open" data-id="${s.id}">›</button></div></div>`}).join(''):'<div class="empty-card">Nie masz jeszcze ulubionych stacji.</div>'}
+function renderRanking(){const me=state.ranking.findIndex(x=>x.id===state.user?.id);$('myRankCard').innerHTML=`<span>Twoja pozycja</span><strong>${me>=0?'#'+(me+1):'—'}</strong><span> · ${state.profile?.points||0} pkt · reputacja ${Number(state.profile?.reputation||1).toFixed(2)}</span>`;$('rankingList').innerHTML=state.ranking.length?state.ranking.map((u,i)=>`<div class="rank-row"><div class="rank-pos">${i<3?['🥇','🥈','🥉'][i]:i+1}</div><div class="rank-avatar">${esc((u.nickname||'?')[0].toUpperCase())}</div><div class="rank-user"><strong>${esc(u.nickname||'Użytkownik')}</strong><span>reputacja ${Number(u.reputation||1).toFixed(2)}</span></div><div class="rank-points">${Number(u.points||0)} pkt</div></div>`).join(''):'<div class="empty-card">Ranking jest pusty.</div>'}
+function renderProfile(){$('profileEmail').textContent=state.user?.email||'Użytkownik';$('profileAvatar').textContent=(state.profile?.nickname||state.user?.email||'T')[0].toUpperCase();$('profileReputation').textContent=`Reputacja ${Number(state.profile?.reputation||1).toFixed(2)}`;$('soundState').textContent=state.profile?.sounds_enabled?'włączone':'wyłączone';$('locationStatus').textContent=state.location?'włączona':'wyłączona';$('adminEntry').classList.toggle('hidden',state.profile?.role!=='admin');renderCars();renderFavoritesProfile()}
+function renderAll(){renderHome();renderProfile();renderRanking();if(state.map)renderMap()}
+
+async function loadProfile(){const old=state.profile?.points||0;const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).single();if(error)return console.warn(error);state.profile=data;if(data.points>old&&old>0)awardAnimation(data.points-old);renderAll()}
+async function loadCars(){const {data,error}=await sb.from('cars').select('*').eq('user_id',state.user.id).order('created_at');if(error)return toast('Nie udało się wczytać samochodów.');state.cars=(data||[]).map(c=>({id:c.id,name:c.name,engine:c.engine,fuel:c.fuel_type,consumption:Number(c.consumption),is_active:c.is_active}));state.activeCarId=state.cars.find(c=>c.is_active)?.id||state.cars[0]?.id||null;if(activeCar())state.fuel=activeCar().fuel;savePrefs();renderAll()}
+async function loadFavorites(){const {data,error}=await sb.from('favorite_stations').select('*').eq('user_id',state.user.id);if(error)return console.warn(error);state.favorites=new Map((data||[]).map(x=>[String(x.station_id),x]));renderAll()}
+async function loadRanking(){const {data,error}=await sb.from('profiles').select('id,nickname,points,reputation').order('points',{ascending:false}).limit(100);if(!error){state.ranking=data||[];renderRanking()}}
+async function loadStations(){const {data,error}=await sb.from('stations_with_latest_prices').select('*').limit(3000);if(error)return console.warn(error);state.stations=(data||[]).map(normalizeStation);fillStationSelect();renderAll()}
+function fillStationSelect(){const sel=$('reportStation');if(!sel)return;const arr=[...state.stations].sort((a,b)=>stationDistance(a)-stationDistance(b));sel.innerHTML=arr.map(s=>`<option value="${s.id}">${esc(s.name)}${s.address?' — '+esc(s.address):''}</option>`).join('')}
+
+async function syncNearbyOSM(center=state.location||JAROCIN,radius=30000){$('mapStatus').textContent='Pobieranie stacji z OpenStreetMap…';const q=`[out:json][timeout:25];(node[\"amenity\"=\"fuel\"](around:${Math.min(radius,30000)},${center.lat},${center.lng});way[\"amenity\"=\"fuel\"](around:${Math.min(radius,30000)},${center.lat},${center.lng}););out center tags;`;try{const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});const json=await res.json();const existing=new Set(state.stations.map(s=>s.externalId).filter(Boolean));const rows=json.elements.map(e=>({external_id:`osm:${e.type}:${e.id}`,name:e.tags?.brand||e.tags?.name||'Stacja paliw',brand:e.tags?.brand||null,address:[e.tags?.['addr:street'],e.tags?.['addr:housenumber'],e.tags?.['addr:city']].filter(Boolean).join(' ')||null,latitude:e.lat??e.center?.lat,longitude:e.lon??e.center?.lon,source:'osm'})).filter(x=>x.latitude&&x.longitude&&!existing.has(x.external_id));if(rows.length){const {error}=await sb.from('stations').insert(rows.slice(0,400));if(error&&!String(error.message).includes('duplicate'))console.warn(error)}await loadStations();$('mapStatus').textContent=`${state.stations.length} stacji w bazie`}catch(e){console.warn(e);$('mapStatus').textContent='Nie udało się odświeżyć stacji z OSM.'}}
+
+function initMap(){if(state.map)return;state.map=L.map('map',{zoomControl:false}).setView([JAROCIN.lat,JAROCIN.lng],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.map);L.control.zoom({position:'bottomleft'}).addTo(state.map);renderMap()}
+function renderMap(){if(!state.map)return;state.markers.forEach(m=>m.remove());state.markers=[];for(const s of state.stations){const p=s.prices[state.fuel],conf=confidence(s),color=p?(conf.cls==='high'?'#0f8f5b':conf.cls==='mid'?'#d39a16':'#b54444'):'#64748b';const html=`<div class="map-price-pin" style="--pin:${color}">${p?fmt(p):'—'}</div>`;const icon=L.divIcon({className:'',html,iconSize:[52,32],iconAnchor:[26,16]});const m=L.marker([s.lat,s.lng],{icon}).addTo(state.map);m.bindPopup(`<div class="map-popup"><b>${esc(s.name)}</b><small>${esc(s.address||'')}</small><strong>${p?fmt(p)+' zł/l · '+humanAge(s.updatedAt):'Brak ceny '+fuelLabel(state.fuel)}</strong><div class="popup-actions"><button class="popup-open" data-open="${s.id}">Szczegóły</button>${p?`<button class="popup-confirm" data-confirm="${s.id}">Potwierdź</button>`:''}</div></div>`);state.markers.push(m)}if(state.location){L.circleMarker([state.location.lat,state.location.lng],{radius:7,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(state.map)}}
+
+async function requestLocation(){if(!navigator.geolocation)return toast('Ta przeglądarka nie obsługuje lokalizacji.');navigator.geolocation.getCurrentPosition(async p=>{state.location={lat:p.coords.latitude,lng:p.coords.longitude};$('locationBanner').classList.add('hidden');if(state.map)state.map.setView([state.location.lat,state.location.lng],13);renderAll();await syncNearbyOSM(state.location)},()=>toast('Nie udało się uzyskać lokalizacji.'),{enableHighAccuracy:true,timeout:12000,maximumAge:60000})}
+
+async function addCar(){const row={user_id:state.user.id,name:$('carName').value.trim(),engine:$('carEngine').value.trim()||null,fuel_type:$('carFuel').value,consumption:Number($('carConsumption').value),is_active:true};await sb.from('cars').update({is_active:false}).eq('user_id',state.user.id);const {error}=await sb.from('cars').insert(row);if(error)return toast(error.message);playSound('success');await loadCars();$('carForm').reset();$('carDialog').close()}
+async function setActiveCar(id){await sb.from('cars').update({is_active:false}).eq('user_id',state.user.id);const {error}=await sb.from('cars').update({is_active:true}).eq('id',id).eq('user_id',state.user.id);if(error)return toast(error.message);$('carPickerDialog').close();playSound('tap');await loadCars()}
+async function deleteCar(id){if(!confirm('Usunąć ten samochód?'))return;await sb.from('cars').delete().eq('id',id).eq('user_id',state.user.id);await loadCars()}
+
+async function toggleFavorite(station,forceNotify=null){if(!station)return;const key=String(station.id),current=state.favorites.get(key);if(current){await sb.from('favorite_stations').delete().eq('user_id',state.user.id).eq('station_id',station.id);state.favorites.delete(key);toast('Usunięto z ulubionych.');renderAll();return}const row={user_id:state.user.id,station_id:station.id,notify_new_price:false,last_seen_price_report_id:station.latestReportId||null};const {data,error}=await sb.from('favorite_stations').insert(row).select().single();if(error)return toast(error.message);state.favorites.set(key,data);state.selectedFavoriteStation=station;renderAll();playSound('success');if(forceNotify===true)return setFavoriteNotify(station.id,true);$('favoriteNotifyDialog').showModal()}
+async function setFavoriteNotify(stationId,on){if(on&&'Notification'in window&&Notification.permission==='default'){const perm=await Notification.requestPermission();if(perm!=='granted'){toast('Powiadomienia nie zostały włączone.');on=false}}const {error}=await sb.from('favorite_stations').update({notify_new_price:on}).eq('user_id',state.user.id).eq('station_id',stationId);if(error)return toast(error.message);const f=state.favorites.get(String(stationId));if(f)f.notify_new_price=on;$('favoriteNotifyDialog').close();renderAll();toast(on?'Powiadomienia włączone.':'Powiadomienia wyłączone.')}
+
+async function openStationDetails(id){const s=state.stations.find(x=>String(x.id)===String(id));if(!s)return;state.selectedStation=s;$('detailsName').textContent=s.name;await sb.from('recent_stations').upsert({user_id:state.user.id,station_id:s.id,last_opened_at:new Date().toISOString()});const c=confidence(s);$('detailsBody').innerHTML=`<div class="details-meta"><div><span>${fuelLabel(state.fuel)}</span><strong>${fmt(s.prices[state.fuel])} zł/l</strong></div><div><span>AKTUALIZACJA</span><strong>${humanAge(s.updatedAt)}</strong></div><div><span>WIARYGODNOŚĆ</span><strong>${c.label}</strong></div></div><p class="history-note">${esc(s.address||'Brak adresu')} · źródło ceny: ${esc(s.priceSource||'brak')}</p>`;$('detailsFavorite').textContent=state.favorites.has(String(s.id))?'★ Usuń z ulubionych':'☆ Dodaj do ulubionych';$('stationDetailsDialog').showModal();await loadPriceHistory(s.id)}
+async function loadPriceHistory(stationId){const since=new Date(Date.now()-30*864e5).toISOString();const {data}=await sb.from('price_reports').select('prices,created_at').eq('station_id',stationId).gte('created_at',since).order('created_at');const pts=(data||[]).map(x=>({x:new Date(x.created_at).getTime(),y:Number(x.prices?.[state.fuel])})).filter(x=>x.y>0);if(state.chart)state.chart.destroy();const ctx=$('priceChart');state.chart=new Chart(ctx,{type:'line',data:{datasets:[{label:fuelLabel(state.fuel),data:pts,borderColor:'#0f8f5b',backgroundColor:'rgba(15,143,91,.08)',fill:true,tension:.3,pointRadius:2}]},options:{parsing:false,responsive:true,plugins:{legend:{display:false}},scales:{x:{type:'linear',ticks:{callback:v=>new Date(v).toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'}),maxTicksLimit:5}},y:{ticks:{callback:v=>Number(v).toFixed(2)}}}}})}
+
+async function confirmPrice(id){const s=state.stations.find(x=>String(x.id)===String(id));if(!s)return;const prices={};for(const f of Object.keys(FUEL_LABEL))if(Number(s.prices[f])>0)prices[f]=Number(s.prices[f]);const {error}=await sb.from('price_reports').insert({station_id:s.id,user_id:state.user.id,prices,latitude:state.location?.lat,longitude:state.location?.lng,source:'confirmation'});if(error)return toast(error.message);toast('Cena potwierdzona. +2 pkt');playSound('success');await Promise.all([loadStations(),loadProfile()])}
+
+function makeOcrFields(values={}){$('ocrFields').innerHTML=Object.keys(FUEL_LABEL).map(f=>`<div class="ocr-row"><strong>${FUEL_LABEL[f]}</strong><input class="ocr-price" data-fuel="${f}" inputmode="decimal" placeholder="np. 5,99" value="${values[f]?String(values[f]).replace('.',','):''}" /></div>`).join('')}
+function parseOCR(text){const lines=text.toUpperCase().split(/\n+/).map(x=>x.replace(/,/g,'.').trim()).filter(Boolean);const out={};const patterns={pb95:/(PB\s*95|95\s*E?10|E10)/,pb98:/(PB\s*98|98\s*E?5|E5)/,on:/(\bON\b|DIESEL|OLEJ)/,lpg:/(LPG|GAZ)/};const priceOf=line=>{const nums=[...line.matchAll(/\b([2-9])(?:[\s.]?)(\d{2})\b/g)].map(m=>Number(`${m[1]}.${m[2]}`)).filter(v=>v>=2&&v<=9.99);return nums[nums.length-1]||null};for(let i=0;i<lines.length;i++){for(const [f,re] of Object.entries(patterns)){if(re.test(lines[i])){let p=priceOf(lines[i]);if(!p&&lines[i+1])p=priceOf(lines[i+1]);if(p)out[f]=p}}}return out}
+async function runOCR(file){state.photoFile=file;state.ocrSource='photo';$('ocrPanel').classList.remove('hidden');$('photoPreview').src=URL.createObjectURL(file);$('photoPreview').classList.remove('hidden');$('ocrStatus').classList.remove('hidden');$('ocrStatus').textContent='Analizuję zdjęcie… 0%';makeOcrFields();try{const result=await Tesseract.recognize(file,'eng',{logger:m=>{if(m.status==='recognizing text')$('ocrStatus').textContent=`Analizuję zdjęcie… ${Math.round((m.progress||0)*100)}%`}});const text=result.data.text||'';$('ocrRawText').textContent=text;$('ocrRawWrap').classList.remove('hidden');const vals=parseOCR(text);makeOcrFields(vals);const count=Object.keys(vals).length;$('ocrStatus').textContent=count?`Rozpoznano ${count} ${count===1?'cenę':'ceny'}. Sprawdź je przed zapisem.`:'Nie udało się pewnie przypisać cen do paliw. Wpisz wartości ręcznie — aplikacja nie zgaduje.';playSound(count?'success':'error')}catch(e){console.warn(e);$('ocrStatus').textContent='OCR nie zakończył analizy. Wpisz ceny ręcznie.';playSound('error')}}
+async function savePrices(){const stationId=Number($('reportStation').value);if(!stationId)return toast('Wybierz stację.');const prices={};document.querySelectorAll('.ocr-price').forEach(i=>{const v=Number(i.value.replace(',','.'));if(v>=2&&v<=12)prices[i.dataset.fuel]=v});if(!Object.keys(prices).length)return toast('Wpisz przynajmniej jedną cenę.');let photoPath=null;if(state.photoFile){const ext=state.photoFile.name?.split('.').pop()||'jpg';photoPath=`${state.user.id}/${Date.now()}.${ext}`;const up=await sb.storage.from('pylon-photos').upload(photoPath,state.photoFile,{upsert:false});if(up.error)console.warn(up.error)}const {error}=await sb.from('price_reports').insert({station_id:stationId,user_id:state.user.id,prices,latitude:state.location?.lat,longitude:state.location?.lng,source:state.ocrSource,photo_url:photoPath});if(error)return toast(error.message);toast(state.ocrSource==='photo'?'Ceny zapisane. +10 pkt':'Ceny zapisane. +5 pkt');playSound('coin');state.photoFile=null;$('ocrPanel').classList.add('hidden');await Promise.all([loadStations(),loadProfile(),loadRanking()])}
+
+async function submitStationReport(){const s=state.selectedStation;if(!s)return;const {error}=await sb.from('station_reports').insert({station_id:s.id,user_id:state.user.id,category:$('reportCategory').value,message:$('reportMessage').value.trim()||null});if(error)return toast(error.message);$('reportDialog').close();$('reportForm').reset();toast('Zgłoszenie trafiło do administratora.');playSound('success')}
+async function loadAdminReports(){if(state.profile?.role!=='admin')return;const {data,error}=await sb.from('station_reports').select('*,stations(name,address)').eq('status',state.adminStatus).order('created_at',{ascending:false}).limit(100);if(error)return toast(error.message);$('adminReports').innerHTML=(data||[]).length?(data||[]).map(r=>`<div class="admin-report"><header><strong>${esc(r.stations?.name||'Stacja')}</strong><time>${new Date(r.created_at).toLocaleString('pl-PL')}</time></header><span class="eyebrow">${esc(r.category)}</span><p>${esc(r.message||'Brak dodatkowego opisu')}</p><div class="admin-actions"><button class="resolve" data-report="${r.id}" data-action="resolved">Rozwiąż</button><button data-report="${r.id}" data-action="in_progress">W toku</button><button class="reject" data-report="${r.id}" data-action="rejected">Odrzuć</button></div></div>`).join(''):'<div class="empty-card">Brak zgłoszeń w tej kategorii.</div>'}
+async function updateAdminReport(id,status){const {error}=await sb.from('station_reports').update({status,handled_by:state.user.id,handled_at:new Date().toISOString()}).eq('id',id);if(error)return toast(error.message);await loadAdminReports()}
+
+async function addManualStation(){const row={name:$('stationName').value.trim(),address:$('stationAddress').value.trim()||null,latitude:Number($('stationLat').value),longitude:Number($('stationLng').value),source:'manual'};const {error}=await sb.from('stations').insert(row);if(error)return toast(error.message);$('stationDialog').close();$('stationForm').reset();toast('Stacja dodana.');await loadStations()}
+
+function nearestDistanceToRoute(s,coords){let d=Infinity;for(let i=0;i<coords.length;i+=Math.max(1,Math.floor(coords.length/120)))d=Math.min(d,hav({lat:s.lat,lng:s.lng},{lat:coords[i][1],lng:coords[i][0]}));return d}
+async function calculateRoute(){if(!state.location)return toast('Najpierw włącz lokalizację.');const dest=$('routeDestination').value.trim();if(!dest)return toast('Wpisz cel podróży.');$('routeResult').innerHTML='<div class="route-progress"><i></i></div><p class="muted">Wyznaczam trasę i analizuję stacje…</p>';try{const geo=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(dest)}`,{headers:{'Accept-Language':'pl'}}).then(r=>r.json());if(!geo[0])throw new Error('Nie znaleziono miejsca');const end={lat:Number(geo[0].lat),lng:Number(geo[0].lon)};const url=`https://router.project-osrm.org/route/v1/driving/${state.location.lng},${state.location.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;const route=await fetch(url).then(r=>r.json());if(route.code!=='Ok')throw new Error('Nie udało się wyznaczyć trasy');const r=route.routes[0],coords=r.geometry.coordinates;const candidates=state.stations.map(s=>({...s,corridor:nearestDistanceToRoute(s,coords)})).filter(s=>s.corridor<=7&&Number(s.prices[state.fuel])>0);const car=activeCar();const ranked=candidates.map(s=>{const price=Number(s.prices[state.fuel]),detour=s.corridor*2,extra=car?detour*Number(car.consumption)/100*price:0,total=price*state.liters+extra;return{...s,price,detour,extra,total}}).sort((a,b)=>a.total-b.total);const best=ranked[0];if(!best){$('routeResult').innerHTML=`<div class="empty-card">Trasa ma ${(r.distance/1000).toFixed(0)} km, ale w naszej bazie nie ma jeszcze stacji z aktualną ceną ${fuelLabel(state.fuel)} blisko tej trasy.</div>`;return}const baseline=Math.min(...candidates.map(s=>Number(s.prices[state.fuel])))*state.liters;const saving=Math.max(0,baseline-best.total);$('routeResult').innerHTML=`<div class="route-summary"><strong>${(r.distance/1000).toFixed(0)} km · ${Math.round(r.duration/60)} min</strong><span>Analiza dla ${state.liters} l ${fuelLabel(state.fuel)}</span></div><div class="route-station"><span class="eyebrow">NAJLEPSZY POSTÓJ</span><h4>${esc(best.name)}</h4><p>${fmt(best.price)} zł/l · ok. ${best.detour.toFixed(1).replace('.',',')} km od trasy</p><p>${car?'Koszt dodatkowego dojazdu ok. '+best.extra.toFixed(2).replace('.',',')+' zł':'Dodaj samochód, aby policzyć koszt zjazdu.'}</p><button class="primary wide route-nav" data-id="${best.id}" style="margin-top:9px">Nawiguj do stacji</button></div>`}catch(e){console.warn(e);$('routeResult').innerHTML=`<div class="empty-card">${esc(e.message||'Nie udało się wyznaczyć trasy.')}</div>`}}
+
+const slides=[
+ {title:'Najlepsza stacja, nie tylko najtańsza',text:'Tanko uwzględnia cenę paliwa, odległość i spalanie Twojego auta.',visual:'<div class="tutorial-map"><span class="tutorial-pin">📍</span></div>'},
+ {title:'Zrób zdjęcie pylonu',text:'OCR odczyta ceny ze zdjęcia. Zawsze możesz je sprawdzić przed publikacją.',visual:'<div class="tutorial-camera">⌾</div>'},
+ {title:'Zbieraj punkty',text:'Zdjęcia i potwierdzenia budują Twój ranking. Nagrody za punkty pojawią się wkrótce.',visual:'<div class="tutorial-wallet">◫<span class="tutorial-coin">●</span></div>'},
+ {title:'Tankowanie po trasie',text:'Wpisz cel podróży, a Tanko wskaże opłacalną stację po drodze.',visual:'<div class="tutorial-route"><span class="mini-car">🚗</span><span class="mini-pin">●</span></div>'}
 ];
+function showOnboarding(force=false){if(!force&&state.profile?.onboarding_completed)return;state.onboardingIndex=0;renderOnboarding();$('onboardingDialog').showModal()}
+function renderOnboarding(){const s=slides[state.onboardingIndex];$('onboardingSlides').innerHTML=`<div class="slide"><div class="slide-visual">${s.visual}</div><span class="eyebrow">${state.onboardingIndex+1} / ${slides.length}</span><h2>${s.title}</h2><p>${s.text}</p></div>`;$('onboardingDots').innerHTML=slides.map((_,i)=>`<i class="${i===state.onboardingIndex?'active':''}"></i>`).join('');$('onboardingNext').textContent=state.onboardingIndex===slides.length-1?'Zaczynam':'Dalej'}
+async function finishOnboarding(){await sb.from('profiles').update({onboarding_completed:true}).eq('id',state.user.id);state.profile.onboarding_completed=true;$('onboardingDialog').close()}
 
-const popularCars = {
-  'Audi A4 B6 1.8T': {engine:'1.8T',fuel:'pb95',consumption:9.0},
-  'Volkswagen Passat B6 2.0 TDI': {engine:'2.0 TDI',fuel:'on',consumption:6.2},
-  'Volkswagen Golf V 1.9 TDI': {engine:'1.9 TDI',fuel:'on',consumption:5.6},
-  'Škoda Octavia II 1.9 TDI': {engine:'1.9 TDI',fuel:'on',consumption:5.5},
-  'BMW E90 320d': {engine:'2.0d',fuel:'on',consumption:6.0},
-  'Opel Astra H 1.6': {engine:'1.6',fuel:'pb95',consumption:7.5}
-};
+function navigateToStation(s){if(!s)return;window.open(`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,'_blank')}
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.screen===id));if(id==='mapScreen'){setTimeout(()=>{initMap();state.map.invalidateSize()},60)}playSound('tap')}
 
-function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
-function saveLocal(){localStorage.setItem('cars',JSON.stringify(state.cars));localStorage.setItem('activeCarId',state.activeCarId||'');localStorage.setItem('fuel',state.fuel);localStorage.setItem('liters',state.liters);localStorage.setItem('points',state.points)}
-function activeCar(){return state.cars.find(c=>String(c.id)===String(state.activeCarId))||state.cars[0]||null}
-function fuelLabel(f){return ({pb95:'PB95',pb98:'PB98',on:'ON',lpg:'LPG'})[f]||f.toUpperCase()}
-function ageHours(ts){return (Date.now()-new Date(ts).getTime())/3600000}
-function freshness(ts){const h=ageHours(ts);if(h<3)return {label:'ŚWIEŻA',cls:'fresh',score:1};if(h<24)return {label:'AKTUALNA',cls:'fresh',score:.9};if(h<72)return {label:'STARSZA',cls:'stale',score:.7};return {label:'NIEPEWNA',cls:'stale',score:.45}}
-function haversine(a,b){const R=6371, dLat=(b.lat-a.lat)*Math.PI/180,dLon=(b.lng-a.lng)*Math.PI/180,la1=a.lat*Math.PI/180,la2=b.lat*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+async function setupRealtime(){if(state.realtime)sb.removeChannel(state.realtime);state.realtime=sb.channel('tanko-live').on('postgres_changes',{event:'INSERT',schema:'public',table:'price_reports'},async payload=>{const fav=state.favorites.get(String(payload.new.station_id));if(!fav)return;await loadStations();if(fav.notify_new_price){const s=state.stations.find(x=>String(x.id)===String(payload.new.station_id));const msg=`Nowa cena na ${s?.name||'ulubionej stacji'}`;toast(msg);if('Notification'in window&&Notification.permission==='granted'&&document.hidden)new Notification('Tanko',{body:msg,icon:'icons/icon-192.png'})}}).subscribe()}
 
-function calcStations(){
-  const car=activeCar();
-  const pos=state.location || {lat:51.972,lng:17.502};
-  const chosenFuel=state.fuel;
-  const valid=stations.filter(s=>Number(s.prices?.[chosenFuel])>0).map(s=>{
-    const distance=haversine(pos,{lat:s.lat,lng:s.lng});
-    const price=Number(s.prices[chosenFuel]);
-    const consumption=car?.consumption||7.5;
-    const travelFuel=(distance*2)*consumption/100;
-    const travelCost=travelFuel*price;
-    return {...s,distance,price,travelCost};
-  });
-  const nearest=valid.slice().sort((a,b)=>a.distance-b.distance)[0];
-  const baseline=nearest? nearest.price*state.liters : 0;
-  return valid.map(s=>{
-    const total=s.price*state.liters+s.travelCost;
-    const saving=baseline-total;
-    const f=freshness(s.updatedAt);
-    const score=(baseline-total)*2 - s.distance*.08 + f.score*4;
-    return {...s,total,saving,score,f};
-  }).sort((a,b)=>b.score-a.score);
-}
+async function bootUser(user){state.user=user;$('authView').classList.add('hidden');$('appView').classList.remove('hidden');await Promise.all([loadProfile(),loadCars(),loadStations(),loadFavorites(),loadRanking()]);await setupRealtime();renderAll();setTimeout(()=>showOnboarding(false),250);if(navigator.geolocation)requestLocation()}
+async function handleAuth(){const {data:{session}}=await sb.auth.getSession();if(session?.user)return bootUser(session.user);$('authView').classList.remove('hidden');$('appView').classList.add('hidden')}
 
-function renderHome(){
-  document.querySelectorAll('.fuel').forEach(b=>b.classList.toggle('active',b.dataset.fuel===state.fuel));
-  $('litersValue').textContent=state.liters;
-  $('pointsValue').textContent=state.points;
-  const car=activeCar();
-  $('carSwitcher').textContent=car ? `${car.name}${car.engine?' · '+car.engine:''} ▾` : 'Dodaj samochód ▾';
-  const ranked=calcStations();
-  const best=ranked[0];
-  if(!best){return}
-  $('bestStationName').textContent=best.name;
-  $('bestPrice').textContent=best.price.toFixed(2).replace('.',',');
-  $('bestDistance').textContent=`${best.distance.toFixed(1).replace('.',',')} km`;
-  $('bestSaving').textContent=best.saving>0?`+${best.saving.toFixed(2).replace('.',',')} zł`:'najbliżej';
-  $('bestFreshness').textContent=best.f.label;
-  $('bestFreshness').className=`confidence ${best.f.cls}`;
-  const badge=$('worthBadge');
-  if(!car){badge.textContent='Dodaj samochód, aby policzyć realny koszt dojazdu';badge.className='worth neutral'}
-  else if(best.saving>5){badge.textContent=`🟢 Warto jechać — po dojeździe zostaje ok. ${best.saving.toFixed(2).replace('.',',')} zł oszczędności`;badge.className='worth good'}
-  else if(best.saving>1){badge.textContent='🟡 Oszczędność jest niewielka';badge.className='worth medium'}
-  else{badge.textContent='🔴 Nie warto nadrabiać drogi tylko dla ceny';badge.className='worth bad'}
-  $('topStations').innerHTML=ranked.slice(0,3).map((s,i)=>`<div class="station-item" data-station="${s.id}"><div class="station-main"><div class="rank-badge">${['🥇','🥈','🥉'][i]}</div><div><strong>${s.name}</strong><div class="sub">${s.distance.toFixed(1).replace('.',',')} km · ${s.confirmations} potwierdzeń</div><div class="${s.f.cls==='fresh'?'fresh-text':'stale-text'}">${humanAge(s.updatedAt)}</div></div></div><div class="station-price"><strong>${s.price.toFixed(2).replace('.',',')}</strong><div class="sub">zł/l</div></div></div>`).join('');
-}
-function humanAge(ts){const m=Math.round((Date.now()-new Date(ts).getTime())/60000);if(m<60)return `aktualizacja ${m} min temu`;const h=Math.round(m/60);if(h<48)return `aktualizacja ${h} godz. temu`;return `aktualizacja ${Math.round(h/24)} dni temu`}
+// EVENTS
+document.querySelectorAll('[data-auth]').forEach(b=>b.onclick=()=>{state.authMode=b.dataset.auth;document.querySelectorAll('[data-auth]').forEach(x=>x.classList.toggle('active',x===b));$('authSubmit').textContent=state.authMode==='login'?'Zaloguj się':'Załóż konto';$('authPassword').autocomplete=state.authMode==='login'?'current-password':'new-password'});
+$('authForm').onsubmit=async e=>{e.preventDefault();const email=$('authEmail').value.trim(),password=$('authPassword').value;if(state.authMode==='login'){const {error}=await sb.auth.signInWithPassword({email,password});if(error)return toast(error.message);const {data:{user}}=await sb.auth.getUser();if(user)bootUser(user)}else{const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:APP_URL}});if(error)return toast(error.message);toast(data.session?'Konto utworzone.':'Sprawdź e-mail i potwierdź konto przez link.')}};
+$('forgotPassword').onclick=()=>{$('resetEmail').value=$('authEmail').value;$('resetDialog').showModal()};$('closeReset').onclick=()=>$('resetDialog').close();$('resetRequestForm').onsubmit=async e=>{e.preventDefault();const {error}=await sb.auth.resetPasswordForEmail($('resetEmail').value.trim(),{redirectTo:RESET_URL});if(error)return toast(error.message);$('resetDialog').close();toast('Link do zmiany hasła został wysłany.')};
+$('logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload()};
+$('enableLocation').onclick=requestLocation;$('changeLocation').onclick=requestLocation;
+$('carSwitcher').onclick=()=>state.cars.length?$('carPickerDialog').showModal():$('carDialog').showModal();$('addCarBtn').onclick=()=>$('carDialog').showModal();$('closeCarPicker').onclick=()=>$('carPickerDialog').close();$('carForm').onsubmit=e=>{e.preventDefault();addCar()};
+document.addEventListener('click',e=>{const c=e.target.closest('.choose-car,.pick-car');if(c)setActiveCar(c.dataset.id);const d=e.target.closest('.remove-car');if(d)deleteCar(d.dataset.id);const os=e.target.closest('.open-station,.fav-open');if(os)openStationDetails(os.dataset.id);const po=e.target.closest('[data-open]');if(po)openStationDetails(po.dataset.open);const pc=e.target.closest('[data-confirm]');if(pc)confirmPrice(pc.dataset.confirm);const fn=e.target.closest('.fav-notify');if(fn){const f=state.favorites.get(String(fn.dataset.id));setFavoriteNotify(fn.dataset.id,!f?.notify_new_price)}const rr=e.target.closest('[data-report][data-action]');if(rr)updateAdminReport(rr.dataset.report,rr.dataset.action);const rn=e.target.closest('.route-nav');if(rn){const s=state.stations.find(x=>String(x.id)===String(rn.dataset.id));navigateToStation(s)}});
+document.querySelectorAll('.fuel').forEach(b=>b.onclick=()=>{state.fuel=b.dataset.fuel;savePrefs();renderAll()});$('minusLiters').onclick=()=>{state.liters=Math.max(5,state.liters-5);savePrefs();renderHome()};$('plusLiters').onclick=()=>{state.liters=Math.min(100,state.liters+5);savePrefs();renderHome()};
+document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>showScreen(b.dataset.screen));$('showAllMap').onclick=()=>showScreen('mapScreen');$('centerMap').onclick=()=>{if(state.location)state.map?.setView([state.location.lat,state.location.lng],14);else requestLocation()};
+$('addStationBtn').onclick=()=>{const c=state.map?.getCenter()||state.location||JAROCIN;$('stationLat').value=c.lat.toFixed(6);$('stationLng').value=c.lng.toFixed(6);$('stationDialog').showModal()};$('stationForm').onsubmit=e=>{e.preventDefault();addManualStation()};
+$('pylonPhoto').onchange=e=>{if(e.target.files?.[0])runOCR(e.target.files[0])};$('manualPriceBtn').onclick=()=>{state.ocrSource='manual';state.photoFile=null;$('ocrPanel').classList.remove('hidden');$('photoPreview').classList.add('hidden');$('ocrStatus').classList.remove('hidden');$('ocrStatus').textContent='Wpisz ceny, które widzisz na stacji.';makeOcrFields()};$('savePrices').onclick=savePrices;
+$('bestFavorite').onclick=()=>toggleFavorite(state.selectedStation);$('navigateBest').onclick=()=>navigateToStation(state.selectedStation);$('openBestDetails').onclick=()=>state.selectedStation&&openStationDetails(state.selectedStation.id);$('closeStationDetails').onclick=()=>$('stationDetailsDialog').close();$('detailsFavorite').onclick=()=>toggleFavorite(state.selectedStation);$('detailsNavigate').onclick=()=>navigateToStation(state.selectedStation);$('detailsReport').onclick=()=>{$('stationDetailsDialog').close();$('reportDialog').showModal()};$('closeReport').onclick=()=>$('reportDialog').close();$('reportForm').onsubmit=e=>{e.preventDefault();submitStationReport()};
+$('enableFavoriteNotify').onclick=()=>setFavoriteNotify(state.selectedFavoriteStation.id,true);$('skipFavoriteNotify').onclick=()=>$('favoriteNotifyDialog').close();
+$('routeHero').onclick=$('mapRouteFab').onclick=()=>{$('routeResult').innerHTML='';$('routeDialog').showModal()};$('closeRoute').onclick=()=>$('routeDialog').close();$('calculateRoute').onclick=calculateRoute;
+$('soundToggle').onclick=async()=>{const next=!state.profile.sounds_enabled;await sb.from('profiles').update({sounds_enabled:next}).eq('id',state.user.id);state.profile.sounds_enabled=next;if(next)playSound('success');renderProfile()};$('showTutorial').onclick=()=>showOnboarding(true);
+$('skipOnboarding').onclick=finishOnboarding;$('onboardingNext').onclick=()=>{if(state.onboardingIndex<slides.length-1){state.onboardingIndex++;renderOnboarding();playSound('tap')}else finishOnboarding()};
+$('adminEntry').onclick=async()=>{state.adminStatus='new';document.querySelectorAll('.admin-filters .seg').forEach(x=>x.classList.toggle('active',x.dataset.status==='new'));$('adminDialog').showModal();await loadAdminReports()};$('closeAdmin').onclick=()=>$('adminDialog').close();document.querySelectorAll('.admin-filters .seg').forEach(b=>b.onclick=async()=>{state.adminStatus=b.dataset.status;document.querySelectorAll('.admin-filters .seg').forEach(x=>x.classList.toggle('active',x===b));await loadAdminReports()});
+$('pointsChip').onclick=()=>showScreen('rankingScreen');
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.deferredInstall=e;$('installBanner').classList.remove('hidden')});$('installBtn').onclick=async()=>{if(!state.deferredInstall)return;state.deferredInstall.prompt();await state.deferredInstall.userChoice;state.deferredInstall=null;$('installBanner').classList.add('hidden')};$('installDismiss').onclick=()=>{$('installBanner').classList.add('hidden');localStorage.setItem('tanko_install_dismissed',Date.now())};
+if(localStorage.getItem('tanko_install_dismissed')&&Date.now()-Number(localStorage.getItem('tanko_install_dismissed'))<7*864e5)$('installBanner').classList.add('hidden');
 
-function renderRanking(){
-  const users=[['Kamil',980],['Dawid',state.points],['Michał',640],['Ola',515],['Bartek',460]].sort((a,b)=>b[1]-a[1]);
-  $('rankingList').innerHTML=users.map((u,i)=>`<div class="rank-item"><div class="station-main"><div class="rank-badge">${i<3?['🥇','🥈','🥉'][i]:i+1}</div><div><strong>${u[0]}</strong><div class="sub">aktywny reporter</div></div></div><div class="right"><strong>${u[1]}</strong><div class="sub">pkt</div></div></div>`).join('');
-}
-function renderCars(){
-  const car=activeCar();
-  $('carsList').innerHTML=state.cars.length?state.cars.map(c=>`<div class="car-item ${car?.id===c.id?'active':''}"><div><strong>${c.name}</strong><div class="sub">${c.engine||'silnik własny'} · ${fuelLabel(c.fuel)} · ${Number(c.consumption).toFixed(1)} l/100 km</div></div><div class="car-actions"><button class="tiny-btn choose-car" data-id="${c.id}">${car?.id===c.id?'Aktywne':'Wybierz'}</button><button class="tiny-btn remove-car" data-id="${c.id}">Usuń</button></div></div>`).join(''):'<div class="car-item"><div><strong>Nie masz jeszcze samochodu</strong><div class="sub">Dodaj auto, aby liczyć koszt dojazdu.</div></div></div>';
-  $('defaultFuelLabel').textContent=fuelLabel(state.fuel);
-  $('profileEmail').textContent=state.user?.email||'Użytkownik demo';
-  $('locationStatus').textContent=state.location?'włączona':'wyłączona';
-  renderCarPicker();
-}
-function renderCarPicker(){
-  $('carPickerList').innerHTML = state.cars.map(c=>`<button class="car-item pick-car" data-id="${c.id}" style="width:100%;text-align:left"><div><strong>${c.name}</strong><div class="sub">${c.engine||''} · ${Number(c.consumption).toFixed(1)} l/100 km</div></div><span>›</span></button>`).join('') || '<p class="muted">Najpierw dodaj samochód.</p>';
-}
-
-async function loadStations(){
-  if(!hasSupabase)return;
-  try{
-    const {data,error}=await sb.from('stations_with_latest_prices').select('*').limit(500);
-    if(error) throw error;
-    if(data?.length){stations=data.map(r=>({id:r.id,name:r.name,address:r.address,lat:Number(r.latitude),lng:Number(r.longitude),prices:{pb95:r.pb95,pb98:r.pb98,on:r.on_price,lpg:r.lpg},updatedAt:r.price_updated_at||r.updated_at,confirmations:r.confirmations||1}));}
-  }catch(e){console.warn('Stations fallback:',e.message)}
-}
-
-function initMap(){
-  if(state.map || !window.L)return;
-  const center=state.location||{lat:51.972,lng:17.502};
-  state.map=L.map('map',{zoomControl:false}).setView([center.lat,center.lng],13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.map);
-  L.control.zoom({position:'bottomright'}).addTo(state.map);
-  renderMapMarkers();
-}
-function renderMapMarkers(){
-  if(!state.map)return;
-  state.markers.forEach(m=>m.remove());state.markers=[];
-  calcStations().forEach(s=>{
-    const color=s.f.cls==='fresh'?'#10b981':'#f59e0b';
-    const icon=L.divIcon({className:'',html:`<div style="background:${color};color:#fff;border:3px solid #fff;box-shadow:0 3px 12px #0003;border-radius:15px;padding:7px 9px;font-weight:900;font-size:12px;white-space:nowrap">${s.price.toFixed(2)} zł</div>`});
-    const m=L.marker([s.lat,s.lng],{icon}).addTo(state.map).bindPopup(`<b>${s.name}</b><br>${fuelLabel(state.fuel)}: ${s.price.toFixed(2)} zł/l<br>${humanAge(s.updatedAt)}`);state.markers.push(m);
-  });
-  if(state.location){const m=L.circleMarker([state.location.lat,state.location.lng],{radius:7}).addTo(state.map).bindPopup('Twoja lokalizacja');state.markers.push(m)}
-}
-
-async function requestLocation(){
-  if(!navigator.geolocation){toast('Ta przeglądarka nie obsługuje GPS.');return}
-  navigator.geolocation.getCurrentPosition(pos=>{
-    state.location={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    $('locationBanner').classList.add('hidden');renderHome();renderCars();
-    if(state.map){state.map.setView([state.location.lat,state.location.lng],14);renderMapMarkers()}
-    toast('Lokalizacja włączona.');
-  },()=>toast('Nie udało się uzyskać lokalizacji. Sprawdź uprawnienia przeglądarki.'),{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
-}
-
-async function signInOrRegister(e){
-  e.preventDefault();
-  const email=$('authEmail').value.trim();
-  const password=$('authPassword').value;
-  if(!hasSupabase){toast('Nie udało się połączyć z usługą logowania.');return}
-
-  if(state.authMode==='login'){
-    const {data,error}=await sb.auth.signInWithPassword({email,password});
-    if(error){toast(error.message);return}
-    state.user=data.user||data.session?.user;
-    enterApp();
-    return;
-  }
-
-  const {data,error}=await sb.auth.signUp({
-    email,
-    password,
-    options:{emailRedirectTo:APP_URL}
-  });
-  if(error){toast(error.message);return}
-  if(data.session){state.user=data.user||data.session.user;enterApp();return}
-  toast('Sprawdź pocztę i kliknij link potwierdzający konto.');
-  state.authMode='login';
-  document.querySelectorAll('[data-auth]').forEach(x=>x.classList.toggle('active',x.dataset.auth==='login'));
-  $('authSubmit').textContent='Zaloguj się';
-  $('forgotPassword').style.display='block';
-}
-
-async function requestResetLink(e){
-  e.preventDefault();
-  const email=$('resetEmail').value.trim();
-  if(!email)return;
-  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:RESET_URL});
-  if(error){toast(error.message);return}
-  $('resetDialog').close();
-  toast('Link do zmiany hasła został wysłany. Sprawdź pocztę.');
-}
-
-function handleAuthHashError(){
-  const hash=new URLSearchParams(location.hash.replace(/^#/,''));
-  const error=hash.get('error_description');
-  if(error){
-    toast(decodeURIComponent(error.replace(/\+/g,' ')));
-    history.replaceState({},document.title,location.pathname+location.search);
-  }
-}
-
-async function logout(){if(hasSupabase)await sb.auth.signOut();localStorage.removeItem('demoEmail');state.user=null;$('appView').classList.add('hidden');$('authView').classList.remove('hidden')}
-
-function enterApp(){
-  $('authView').classList.add('hidden');$('appView').classList.remove('hidden');renderAll();
-  if(!state.cars.length)setTimeout(()=>$('carDialog').showModal(),350);
-}
-function renderAll(){renderHome();renderCars();renderRanking();if(state.map)renderMapMarkers()}
-
-function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.screen===id));if(id==='mapScreen'){setTimeout(()=>{initMap();state.map?.invalidateSize()},80)}if(id==='rankingScreen')renderRanking();if(id==='profileScreen')renderCars()}
-
-function mockOCR(){
-  const near=calcStations()[0]||stations[0];
-  $('ocrFields').innerHTML=['pb95','pb98','on','lpg'].map(f=>`<div class="ocr-row"><strong>${fuelLabel(f)}</strong><input data-ocr-fuel="${f}" type="number" step="0.01" value="${near.prices[f]||''}" placeholder="np. 5.99" /></div>`).join('');
-  $('ocrPanel').classList.remove('hidden');
-  toast('Zdjęcie zostało dodane. Sprawdź ceny przed zapisaniem.');
-}
-async function savePriceReport(){
-  const vals={};document.querySelectorAll('[data-ocr-fuel]').forEach(i=>{if(i.value)vals[i.dataset.ocrFuel]=Number(i.value)});
-  const nearest=calcStations().slice().sort((a,b)=>a.distance-b.distance)[0];if(!nearest)return;
-  if(hasSupabase && state.user){
-    const {error}=await sb.from('price_reports').insert({station_id:nearest.id,user_id:state.user.id,prices:vals,latitude:state.location?.lat,longitude:state.location?.lng,source:'photo'});if(error){toast(error.message);return}
-  }
-  const s=stations.find(x=>x.id===nearest.id);s.prices={...s.prices,...vals};s.updatedAt=Date.now();s.confirmations=(s.confirmations||0)+1;
-  state.points+=10;saveLocal();renderAll();$('ocrPanel').classList.add('hidden');toast('+10 pkt · ceny zapisane');showScreen('homeScreen');
-}
-
-// Auth UI
-document.querySelectorAll('[data-auth]').forEach(b=>b.addEventListener('click',()=>{state.authMode=b.dataset.auth;document.querySelectorAll('[data-auth]').forEach(x=>x.classList.toggle('active',x===b));$('authSubmit').textContent=state.authMode==='login'?'Zaloguj się':'Utwórz konto';$('forgotPassword').style.display=state.authMode==='login'?'block':'none'}));
-$('authForm').addEventListener('submit',signInOrRegister);
-$('forgotPassword').addEventListener('click',()=>{$('resetEmail').value=$('authEmail').value;$('resetDialog').showModal()});
-$('closeReset').addEventListener('click',()=>$('resetDialog').close());
-$('resetRequestForm').addEventListener('submit',requestResetLink);
-
-// Navigation
-document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>showScreen(b.dataset.screen)));
-$('showAllMap').addEventListener('click',()=>showScreen('mapScreen'));$('enableLocation').addEventListener('click',requestLocation);$('changeLocation').addEventListener('click',requestLocation);$('centerMap').addEventListener('click',()=>{if(state.location)state.map?.setView([state.location.lat,state.location.lng],14);else requestLocation()});
-
-document.querySelectorAll('.fuel').forEach(b=>b.addEventListener('click',()=>{state.fuel=b.dataset.fuel;saveLocal();renderAll()}));
-$('minusLiters').addEventListener('click',()=>{state.liters=Math.max(5,state.liters-5);saveLocal();renderHome()});$('plusLiters').addEventListener('click',()=>{state.liters=Math.min(100,state.liters+5);saveLocal();renderHome()});
-$('navigateBest').addEventListener('click',()=>{const s=calcStations()[0];if(s)window.open(`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,'_blank')});
-
-// Cars
-$('addCarBtn').addEventListener('click',()=>{$('carForm').reset();$('carDialog').showModal()});$('carSwitcher').addEventListener('click',()=>{if(!state.cars.length)$('carDialog').showModal();else $('carPickerDialog').showModal()});$('closeCarPicker').addEventListener('click',()=>$('carPickerDialog').close());
-$('carForm').addEventListener('submit',(e)=>{if(e.submitter?.value==='cancel')return;const car={id:Date.now(),name:$('carName').value.trim(),engine:$('carEngine').value.trim(),fuel:$('carFuel').value,consumption:Number($('carConsumption').value)};state.cars.push(car);state.activeCarId=car.id;state.fuel=car.fuel;saveLocal();renderAll();toast('Samochód dodany.');});
-document.addEventListener('click',(e)=>{const choose=e.target.closest('.choose-car,.pick-car');if(choose){state.activeCarId=Number(choose.dataset.id);const c=activeCar();if(c)state.fuel=c.fuel;saveLocal();renderAll();$('carPickerDialog').open&&$('carPickerDialog').close()}const del=e.target.closest('.remove-car');if(del){state.cars=state.cars.filter(c=>String(c.id)!==String(del.dataset.id));if(String(state.activeCarId)===String(del.dataset.id))state.activeCarId=state.cars[0]?.id||null;saveLocal();renderAll();}});
-
-// Photo / OCR placeholder
-$('pylonPhoto').addEventListener('change',(e)=>{if(e.target.files?.[0])mockOCR()});$('manualPriceBtn').addEventListener('click',mockOCR);$('savePrices').addEventListener('click',savePriceReport);
-$('logoutBtn').addEventListener('click',logout);
-
-// PWA install
-window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault();state.deferredInstall=e;if(localStorage.getItem('installDismissed')!==new Date().toDateString())$('installBanner').classList.remove('hidden')});
-$('installBtn').addEventListener('click',async()=>{if(state.deferredInstall){state.deferredInstall.prompt();await state.deferredInstall.userChoice;state.deferredInstall=null;$('installBanner').classList.add('hidden')}else toast('Na iPhonie: Udostępnij → Dodaj do ekranu początkowego.')});
-$('installDismiss').addEventListener('click',()=>{$('installBanner').classList.add('hidden');localStorage.setItem('installDismissed',new Date().toDateString())});
-if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&!window.navigator.standalone&&localStorage.getItem('installDismissed')!==new Date().toDateString())$('installBanner').classList.remove('hidden');
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.warn));
-
-(async function init(){
-  await loadStations();
-  if(hasSupabase){
-    handleAuthHashError();
-    const {data:{session}}=await sb.auth.getSession();
-    if(session){state.user=session.user;enterApp()}
-    sb.auth.onAuthStateChange((event,session)=>{
-      if(session){
-        state.user=session.user;
-        if($('appView').classList.contains('hidden')) enterApp();
-        if(location.hash) history.replaceState({},document.title,location.pathname+location.search);
-      }
-      if(event==='SIGNED_OUT') state.user=null;
-    })
-  }else{const email=localStorage.getItem('demoEmail');if(email){state.user={id:'demo',email};enterApp()}}
-  renderAll();
-})();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(console.warn);
+sb.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session?.user&&!state.user)bootUser(session.user)});
+handleAuth();
