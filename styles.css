@@ -90,3 +90,53 @@ html[data-theme="dark"] .onboarding{background:linear-gradient(180deg,#0b1712,#0
 html[data-theme="dark"] .tutorial-map,html[data-theme="dark"] .tutorial-camera,html[data-theme="dark"] .tutorial-wallet,html[data-theme="dark"] .tutorial-route{background:var(--surface)}
 html[data-theme="dark"] dialog::backdrop{background:rgba(0,0,0,.72)}
 html[data-theme="dark"] .station-picker-map{background:#0b1712}
+
+
+/* ===== Tanko 1.1.1: dark-mode contrast + profile interaction fix ===== */
+#profileScreen{position:relative;z-index:2;pointer-events:auto}
+#profileScreen .profile-head,#profileScreen .section-title,#profileScreen .cars-list,#profileScreen .favorites-list,#profileScreen .settings-card{position:relative;z-index:3;pointer-events:auto}
+.settings-card button{position:relative;z-index:4;pointer-events:auto;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(15,143,91,.12)}
+.settings-card button:active{transform:scale(.995)}
+
+html[data-theme="dark"] .car-switcher,
+html[data-theme="dark"] .points-chip{background:var(--surface);color:var(--ink);border-color:var(--line)}
+html[data-theme="dark"] .fuel-picker{background:#111f19}
+html[data-theme="dark"] .fuel{color:#a9b8b0}
+html[data-theme="dark"] .fuel.active{background:#263a30;color:#ffffff;box-shadow:0 5px 16px rgba(0,0,0,.28)}
+html[data-theme="dark"] .quick-card{background:var(--surface);color:var(--ink)}
+html[data-theme="dark"] .liter-control{background:#182820;color:var(--ink);border:1px solid #2a4035}
+html[data-theme="dark"] .liter-control strong{color:#f4fbf7}
+html[data-theme="dark"] .liter-control button{background:#293d33;color:#ffffff;border:1px solid #365044}
+html[data-theme="dark"] .liter-control button:hover{background:#314a3d}
+html[data-theme="dark"] .theme-option{background:#14221c;color:var(--ink);border-color:var(--line)}
+html[data-theme="dark"] .theme-option span{color:var(--muted)}
+html[data-theme="dark"] .theme-option.active{background:#1b3528;border-color:#3b7b5c}
+html[data-theme="dark"] .car-icon,
+html[data-theme="dark"] .rank-avatar{background:#1a2b23;color:var(--ink)}
+html[data-theme="dark"] .choose-car,
+html[data-theme="dark"] .fav-notify,
+html[data-theme="dark"] .fav-open{background:#1a3025;color:#dff7e9}
+html[data-theme="dark"] .remove-car{background:#351d1d;color:#ffb2b2}
+html[data-theme="dark"] .active-car{background:#10271d!important;border-color:#397759!important}
+html[data-theme="dark"] .permission-banner{background:#2b2614;color:#ffe7a1;border-color:#564a22}
+html[data-theme="dark"] .map-popup{color:#15231d}
+html[data-theme="dark"] .leaflet-popup-content-wrapper,
+html[data-theme="dark"] .leaflet-popup-tip{background:#f8fbf9;color:#14211b}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{color:#71837a;opacity:1}
+html[data-theme="dark"] select option{background:#0f1b16;color:#edf6f1}
+html[data-theme="dark"] .dialog-head h3,
+html[data-theme="dark"] .section-title h3,
+html[data-theme="dark"] .profile-head h3,
+html[data-theme="dark"] .quick-card h3{color:var(--ink)}
+html[data-theme="dark"] label{color:#d7e6de}
+html[data-theme="dark"] .eyebrow,
+html[data-theme="dark"] .brand-kicker{color:#91a79b}
+html[data-theme="dark"] .station-main strong,
+html[data-theme="dark"] .station-price strong,
+html[data-theme="dark"] .favorite-mini strong,
+html[data-theme="dark"] .favorite-mini b,
+html[data-theme="dark"] .car-copy strong,
+html[data-theme="dark"] .favorite-copy strong,
+html[data-theme="dark"] .rank-user strong,
+html[data-theme="dark"] .rank-points{color:var(--ink)}

@@ -1,4 +1,4 @@
-const CACHE='tanko-v12-uxfix';
+const CACHE='tanko-1.1.1-ui-fix';
 const CORE=['./','./index.html','./styles.css','./app.js','./config.js','./manifest.webmanifest','./reset-password.html','./favicon-32.png','./favicon-48.png','./apple-touch-icon.png','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))});
 self.addEventListener('activate',e=>{e.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))]))});
