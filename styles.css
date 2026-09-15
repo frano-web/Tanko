@@ -140,3 +140,8 @@ html[data-theme="dark"] .car-copy strong,
 html[data-theme="dark"] .favorite-copy strong,
 html[data-theme="dark"] .rank-user strong,
 html[data-theme="dark"] .rank-points{color:var(--ink)}
+
+
+/* Tanko 1.1.2 interaction fixes */
+dialog[open]{z-index:1000}.icon-btn{position:relative;z-index:20;pointer-events:auto!important;cursor:pointer!important;touch-action:manipulation}.dialog-head{position:relative;z-index:10}.station-detail-actions{grid-template-columns:1fr 1fr}.station-detail-actions #detailsAddPrice{grid-column:1/-1}.station-detail-actions #detailsNavigate{grid-column:auto}.selected-price-station{margin:0 0 12px;background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 25%,transparent);border-radius:16px;padding:11px 13px}.selected-price-station strong,.selected-price-station span{display:block}.selected-price-station span{font-size:10px;color:var(--muted);margin-top:3px}.popup-actions{grid-template-columns:repeat(2,minmax(0,1fr));}.popup-add-price{background:#0f8f5b;color:#fff}.popup-confirm{grid-column:1/-1}.settings-card button{min-height:48px;isolation:isolate}.settings-card button>*{pointer-events:none}.station-picker-map{min-height:260px}.hidden{display:none!important}
+html[data-theme="dark"] .selected-price-station{background:#123326;border-color:#275a43}html[data-theme="dark"] .popup-open{background:#eaf2ed;color:#153326}

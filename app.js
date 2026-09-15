@@ -22,48 +22,7 @@ function confidence(s){const h=ageHours(s.updatedAt);let score=0;if(h<3)score+=5
 function playSound(type='tap'){if(!state.profile?.sounds_enabled)return;try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);const map={tap:[420,.045],success:[690,.10],coin:[880,.16],error:[180,.12]};const [f,d]=map[type]||map.tap;o.frequency.setValueAtTime(f,audioCtx.currentTime);if(type==='coin')o.frequency.exponentialRampToValueAtTime(1220,audioCtx.currentTime+d);g.gain.setValueAtTime(.06,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+d);o.start();o.stop(audioCtx.currentTime+d)}catch(e){}}
 function awardAnimation(delta){if(delta<=0)return;const b=$('pointsBurst');b.querySelector('span').textContent=`+${delta}`;b.classList.remove('hidden');b.style.animation='none';void b.offsetWidth;b.style.animation='burst .9s ease';playSound('coin');navigator.vibrate?.(30);setTimeout(()=>b.classList.add('hidden'),900)}
 
-function resolvedTheme(pref=state.theme){if(pref==='system')return 
-
-// Tanko 1.1.1 UI safety helpers
-if (typeof window.renderOnboarding !== 'function') {
-  window.renderOnboarding = function(){
-    const slidesArr = Array.from(document.querySelectorAll('#onboardingDialog .slide'));
-    slidesArr.forEach((s,i)=>s.classList.toggle('hidden',i!==state.onboardingIndex));
-    document.querySelectorAll('#onboardingDialog .dots i').forEach((d,i)=>d.classList.toggle('active',i===state.onboardingIndex));
-    const next=$('onboardingNext'); if(next) next.textContent=state.onboardingIndex>=slidesArr.length-1?'Zaczynamy':'Dalej';
-  };
-}
-if (typeof window.showOnboarding !== 'function') {
-  window.showOnboarding = function(force=false){
-    if(!force && (state.profile?.onboarding_completed || localStorage.getItem('tanko_onboarding_completed')==='1')) return;
-    state.onboardingIndex=0; window.renderOnboarding();
-    const dlg=$('onboardingDialog'); if(dlg && !dlg.open) dlg.showModal();
-  };
-}
-if (typeof window.finishOnboarding !== 'function') {
-  window.finishOnboarding = function(){
-    const dlg=$('onboardingDialog'); if(dlg?.open) dlg.close();
-    localStorage.setItem('tanko_onboarding_completed','1');
-    if(state.profile){state.profile.onboarding_completed=true; renderProfile();}
-    if(state.user) sb.from('profiles').update({onboarding_completed:true}).eq('id',state.user.id).then(()=>{}).catch(()=>{});
-  };
-}
-
-const profileSettings = document.querySelector('#profileScreen .settings-card');
-if(profileSettings){
-  profileSettings.addEventListener('click', async (e)=>{
-    const btn=e.target.closest('button'); if(!btn) return;
-    e.stopPropagation();
-    const id=btn.id;
-    if(id==='changeNickname'){ $('nicknameInput').value=state.profile?.nickname||''; if(!$('nicknameDialog').open)$('nicknameDialog').showModal(); }
-    else if(id==='changePassword'){ $('changePasswordForm').reset(); if(!$('changePasswordDialog').open)$('changePasswordDialog').showModal(); }
-    else if(id==='themeButton'){ if(!$('themeDialog').open)$('themeDialog').showModal(); applyTheme(state.theme); }
-    else if(id==='infoCorner'){ if(!$('infoDialog').open)$('infoDialog').showModal(); }
-    else if(id==='showTutorial'){ window.showOnboarding(true); }
-  }, {capture:false});
-}
-
-window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light';return pref}
+function resolvedTheme(pref=state.theme){if(pref==='system')return window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light';return pref}
 function applyTheme(pref=state.theme){state.theme=pref||'system';localStorage.setItem('tanko_theme',state.theme);document.documentElement.dataset.theme=resolvedTheme(state.theme);const label={system:'System',light:'Jasny',dark:'Ciemny'}[state.theme]||'System';if($('themeState'))$('themeState').textContent=label;document.querySelectorAll('.theme-option').forEach(b=>b.classList.toggle('active',b.dataset.theme===state.theme))}
 function resetPhotoFlow(){state.photoFile=null;state.ocrSource='photo';$('pylonPhoto').value='';$('ocrPanel').classList.add('hidden');$('photoPreview').classList.add('hidden');$('photoPreview').removeAttribute('src');$('ocrStatus').classList.add('hidden');$('ocrRawWrap').classList.add('hidden');$('ocrRawText').textContent='';$('ocrFields').innerHTML=''}
 
@@ -90,7 +49,7 @@ function fillStationSelect(){const sel=$('reportStation');if(!sel)return;const a
 async function syncNearbyOSM(center=state.location||JAROCIN,radius=30000){$('mapStatus').textContent='Pobieranie stacji z OpenStreetMap…';const q=`[out:json][timeout:25];(node[\"amenity\"=\"fuel\"](around:${Math.min(radius,30000)},${center.lat},${center.lng});way[\"amenity\"=\"fuel\"](around:${Math.min(radius,30000)},${center.lat},${center.lng}););out center tags;`;try{const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});const json=await res.json();const existing=new Set(state.stations.map(s=>s.externalId).filter(Boolean));const rows=json.elements.map(e=>({external_id:`osm:${e.type}:${e.id}`,name:e.tags?.brand||e.tags?.name||'Stacja paliw',brand:e.tags?.brand||null,address:[e.tags?.['addr:street'],e.tags?.['addr:housenumber'],e.tags?.['addr:city']].filter(Boolean).join(' ')||null,latitude:e.lat??e.center?.lat,longitude:e.lon??e.center?.lon,source:'osm'})).filter(x=>x.latitude&&x.longitude&&!existing.has(x.external_id));if(rows.length){const {error}=await sb.from('stations').insert(rows.slice(0,400));if(error&&!String(error.message).includes('duplicate'))console.warn(error)}await loadStations();$('mapStatus').textContent=`${state.stations.length} stacji w bazie`}catch(e){console.warn(e);$('mapStatus').textContent='Nie udało się odświeżyć stacji z OSM.'}}
 
 function initMap(){if(state.map)return;state.map=L.map('map',{zoomControl:false}).setView([JAROCIN.lat,JAROCIN.lng],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.map);L.control.zoom({position:'bottomleft'}).addTo(state.map);renderMap()}
-function renderMap(){if(!state.map)return;state.markers.forEach(m=>m.remove());state.markers=[];for(const s of state.stations){const p=s.prices[state.fuel],conf=confidence(s),color=p?(conf.cls==='high'?'#0f8f5b':conf.cls==='mid'?'#d39a16':'#b54444'):'#64748b';const html=`<div class="map-price-pin" style="--pin:${color}">${p?fmt(p):'—'}</div>`;const icon=L.divIcon({className:'',html,iconSize:[52,32],iconAnchor:[26,16]});const m=L.marker([s.lat,s.lng],{icon}).addTo(state.map);m.bindPopup(`<div class="map-popup"><b>${esc(s.name)}</b><small>${esc(s.address||'')}</small><strong>${p?fmt(p)+' zł/l · '+humanAge(s.updatedAt):'Brak ceny '+fuelLabel(state.fuel)}</strong><div class="popup-actions"><button class="popup-open" data-open="${s.id}">Szczegóły</button>${p?`<button class="popup-confirm" data-confirm="${s.id}">Potwierdź</button>`:''}</div></div>`);state.markers.push(m)}if(state.location){L.circleMarker([state.location.lat,state.location.lng],{radius:7,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(state.map)}}
+function renderMap(){if(!state.map)return;state.markers.forEach(m=>m.remove());state.markers=[];for(const s of state.stations){const p=s.prices[state.fuel],conf=confidence(s),color=p?(conf.cls==='high'?'#0f8f5b':conf.cls==='mid'?'#d39a16':'#b54444'):'#64748b';const html=`<div class="map-price-pin" style="--pin:${color}">${p?fmt(p):'—'}</div>`;const icon=L.divIcon({className:'',html,iconSize:[52,32],iconAnchor:[26,16]});const m=L.marker([s.lat,s.lng],{icon}).addTo(state.map);m.bindPopup(`<div class="map-popup"><b>${esc(s.name)}</b><small>${esc(s.address||'')}</small><strong>${p?fmt(p)+' zł/l · '+humanAge(s.updatedAt):'Brak ceny '+fuelLabel(state.fuel)}</strong><div class="popup-actions"><button class="popup-open" data-open="${s.id}">Szczegóły</button><button class="popup-add-price" data-add-price="${s.id}">Dodaj cenę</button>${p?`<button class="popup-confirm" data-confirm="${s.id}">Potwierdź</button>`:''}</div></div>`);state.markers.push(m)}if(state.location){L.circleMarker([state.location.lat,state.location.lng],{radius:7,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(state.map)}}
 
 async function requestLocation(){if(!navigator.geolocation)return toast('Ta przeglądarka nie obsługuje lokalizacji.');navigator.geolocation.getCurrentPosition(async p=>{state.location={lat:p.coords.latitude,lng:p.coords.longitude};$('locationBanner').classList.add('hidden');if(state.map)state.map.setView([state.location.lat,state.location.lng],13);renderAll();await syncNearbyOSM(state.location)},()=>toast('Nie udało się uzyskać lokalizacji.'),{enableHighAccuracy:true,timeout:12000,maximumAge:60000})}
 
@@ -106,6 +65,38 @@ async function loadPriceHistory(stationId){const since=new Date(Date.now()-30*86
 
 async function confirmPrice(id){const s=state.stations.find(x=>String(x.id)===String(id));if(!s)return;if(!state.location)return toast('Włącz GPS. Cenę można potwierdzić tylko będąc przy stacji.');const d=hav(state.location,{lat:s.lat,lng:s.lng});if(d>0.5)return toast(`Jesteś za daleko od stacji (${d.toFixed(1).replace('.',',')} km). Podejdź bliżej, aby potwierdzić cenę.`);const prices={};for(const f of Object.keys(FUEL_LABEL))if(Number(s.prices[f])>0)prices[f]=Number(s.prices[f]);const {error}=await sb.from('price_reports').insert({station_id:s.id,user_id:state.user.id,prices,latitude:state.location.lat,longitude:state.location.lng,source:'confirmation'});if(error)return toast(error.message);toast('Cena potwierdzona. +2 pkt');playSound('success');await Promise.all([loadStations(),loadProfile(),loadRanking()])}
 
+
+
+function makeOcrFields(values={}){$('ocrFields').innerHTML=Object.keys(FUEL_LABEL).map(f=>`<div class="ocr-row"><strong>${FUEL_LABEL[f]}</strong><input class="ocr-price" data-fuel="${f}" inputmode="decimal" placeholder="np. 5,99" value="${values[f]?String(values[f]).replace('.',','):''}" /></div>`).join('')}
+function parseOCR(text){const lines=text.toUpperCase().split(/\n+/).map(x=>x.replace(/,/g,'.').trim()).filter(Boolean);const out={};const patterns={pb95:/(PB\s*95|95\s*E?10|E10)/,pb98:/(PB\s*98|98\s*E?5|E5)/,on:/(\bON\b|DIESEL|OLEJ)/,lpg:/(LPG|GAZ)/};const priceOf=line=>{const nums=[...line.matchAll(/\b([2-9])(?:[\s.]?)(\d{2})\b/g)].map(m=>Number(`${m[1]}.${m[2]}`)).filter(v=>v>=2&&v<=12);return nums[nums.length-1]||null};for(let i=0;i<lines.length;i++){for(const [f,re] of Object.entries(patterns)){if(re.test(lines[i])){let p=priceOf(lines[i]);if(!p&&lines[i+1])p=priceOf(lines[i+1]);if(p)out[f]=p}}}return out}
+async function runOCR(file){state.photoFile=file;state.ocrSource='photo';$('ocrPanel').classList.remove('hidden');$('photoPreview').src=URL.createObjectURL(file);$('photoPreview').classList.remove('hidden');$('ocrStatus').classList.remove('hidden');$('ocrStatus').textContent='Analizuję zdjęcie… 0%';makeOcrFields();try{const result=await Tesseract.recognize(file,'eng',{logger:m=>{if(m.status==='recognizing text')$('ocrStatus').textContent=`Analizuję zdjęcie… ${Math.round((m.progress||0)*100)}%`}});const text=result.data.text||'';$('ocrRawText').textContent=text;$('ocrRawWrap').classList.remove('hidden');const vals=parseOCR(text);makeOcrFields(vals);const count=Object.keys(vals).length;$('ocrStatus').textContent=count?`Rozpoznano ${count} ${count===1?'cenę':'ceny'}. Sprawdź je przed zapisem.`:'Nie udało się pewnie przypisać cen do paliw. Wpisz wartości ręcznie — aplikacja nie zgaduje.';playSound(count?'success':'error')}catch(e){console.warn(e);$('ocrStatus').textContent='OCR nie zakończył analizy. Wpisz ceny ręcznie.';playSound('error')}}
+async function savePrices(){const stationId=Number($('reportStation').value);if(!stationId)return toast('Wybierz stację.');const prices={};document.querySelectorAll('.ocr-price').forEach(i=>{const v=Number(i.value.replace(',','.'));if(v>=2&&v<=12)prices[i.dataset.fuel]=v});if(!Object.keys(prices).length)return toast('Wpisz przynajmniej jedną cenę.');let photoPath=null;if(state.photoFile){const ext=state.photoFile.name?.split('.').pop()||'jpg';photoPath=`${state.user.id}/${Date.now()}.${ext}`;const up=await sb.storage.from('pylon-photos').upload(photoPath,state.photoFile,{upsert:false});if(up.error)console.warn(up.error)}const {error}=await sb.from('price_reports').insert({station_id:stationId,user_id:state.user.id,prices,latitude:state.location?.lat,longitude:state.location?.lng,source:state.ocrSource,photo_url:photoPath});if(error)return toast(error.message);toast(state.ocrSource==='photo'?'Ceny zapisane. +10 pkt':'Ceny zapisane. +5 pkt');playSound('coin');resetPhotoFlow();$('selectedPriceStation').classList.add('hidden');await Promise.all([loadStations(),loadProfile(),loadRanking()])}
+
+function setStationPickerPoint(lat,lng){lat=Number(lat);lng=Number(lng);$('stationLat').value=lat.toFixed(6);$('stationLng').value=lng.toFixed(6);$('stationCoordsLabel').textContent=`Pinezka: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;if(!state.stationPickerMap)return;if(!state.stationPickerMarker){state.stationPickerMarker=L.marker([lat,lng],{draggable:true}).addTo(state.stationPickerMap);state.stationPickerMarker.on('dragend',()=>{const p=state.stationPickerMarker.getLatLng();setStationPickerPoint(p.lat,p.lng)})}else state.stationPickerMarker.setLatLng([lat,lng]);}
+function initStationPicker(){const c=state.location||JAROCIN;if(!state.stationPickerMap){state.stationPickerMap=L.map('stationPickerMap',{zoomControl:true}).setView([c.lat,c.lng],15);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.stationPickerMap);state.stationPickerMap.on('click',e=>setStationPickerPoint(e.latlng.lat,e.latlng.lng))}setTimeout(()=>state.stationPickerMap.invalidateSize(),80);setStationPickerPoint(c.lat,c.lng)}
+function openStationDialog(){if($('stationForm'))$('stationForm').reset();const dlg=$('stationDialog');if(!dlg.open)dlg.showModal();setTimeout(initStationPicker,80)}
+async function findStationAddress(){const q=$('stationAddress').value.trim();if(!q)return toast('Wpisz adres stacji.');try{const rows=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,{headers:{'Accept-Language':'pl'}}).then(r=>r.json());if(!rows[0])return toast('Nie znaleziono tego adresu.');const lat=Number(rows[0].lat),lng=Number(rows[0].lon);state.stationPickerMap?.setView([lat,lng],17);setStationPickerPoint(lat,lng)}catch(e){toast('Nie udało się wyszukać adresu.')}}
+async function addManualStation(){const lat=Number($('stationLat').value),lng=Number($('stationLng').value),name=$('stationName').value.trim();if(!name)return toast('Podaj nazwę stacji.');if(!Number.isFinite(lat)||!Number.isFinite(lng))return toast('Ustaw pinezkę na mapie.');const row={name,address:$('stationAddress').value.trim()||null,latitude:lat,longitude:lng,source:'manual'};const {error}=await sb.from('stations').insert(row);if(error)return toast(error.message);$('stationDialog').close();toast('Stacja dodana.');await loadStations()}
+
+async function submitStationReport(){const s=state.selectedStation;if(!s)return;const {error}=await sb.from('station_reports').insert({station_id:s.id,user_id:state.user.id,category:$('reportCategory').value,message:$('reportMessage').value.trim()||null});if(error)return toast(error.message);$('reportDialog').close();$('reportForm').reset();toast('Zgłoszenie trafiło do administratora.');playSound('success')}
+async function loadAdminReports(){if(state.profile?.role!=='admin')return;const {data,error}=await sb.from('station_reports').select('*,stations(name,address)').eq('status',state.adminStatus).order('created_at',{ascending:false}).limit(100);if(error)return toast(error.message);$('adminReports').innerHTML=(data||[]).length?(data||[]).map(r=>`<div class="admin-report"><header><strong>${esc(r.stations?.name||'Stacja')}</strong><time>${new Date(r.created_at).toLocaleString('pl-PL')}</time></header><span class="eyebrow">${esc(r.category)}</span><p>${esc(r.message||'Brak dodatkowego opisu')}</p><div class="admin-actions">${r.category==='duplicate'?`<button class="reject" data-delete-station="${r.station_id}" data-report-after-delete="${r.id}">Usuń duplikat</button>`:''}<button class="resolve" data-report="${r.id}" data-action="resolved">Rozwiąż</button><button data-report="${r.id}" data-action="in_progress">W toku</button><button class="reject" data-report="${r.id}" data-action="rejected">Odrzuć</button></div></div>`).join(''):'<div class="empty-card">Brak zgłoszeń w tej kategorii.</div>'}
+async function updateAdminReport(id,status){const {error}=await sb.from('station_reports').update({status,handled_by:state.user.id,handled_at:new Date().toISOString()}).eq('id',id);if(error)return toast(error.message);await loadAdminReports()}
+async function deleteStationAdmin(id,reportId=null){if(state.profile?.role!=='admin')return toast('Brak uprawnień administratora.');if(!confirm('Usunąć tę stację z bazy? Ta operacja usunie też jej powiązane ceny i zgłoszenia.'))return;const {error}=await sb.from('stations').delete().eq('id',id);if(error)return toast(error.message);if(reportId)await updateAdminReport(reportId,'resolved');toast('Stacja została usunięta.');await loadStations();await loadAdminReports()}
+
+function nearestDistanceToRoute(s,coords){let d=Infinity;for(let i=0;i<coords.length;i+=Math.max(1,Math.floor(coords.length/120)))d=Math.min(d,hav({lat:s.lat,lng:s.lng},{lat:coords[i][1],lng:coords[i][0]}));return d}
+async function calculateRoute(){if(!state.location)return toast('Najpierw włącz lokalizację.');const dest=$('routeDestination').value.trim();if(!dest)return toast('Wpisz cel podróży.');$('routeResult').innerHTML='<div class="route-progress"><i></i></div><p class="muted">Wyznaczam trasę i analizuję stacje…</p>';try{const geo=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(dest)}`,{headers:{'Accept-Language':'pl'}}).then(r=>r.json());if(!geo[0])throw new Error('Nie znaleziono miejsca');const end={lat:Number(geo[0].lat),lng:Number(geo[0].lon)};const url=`https://router.project-osrm.org/route/v1/driving/${state.location.lng},${state.location.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;const route=await fetch(url).then(r=>r.json());if(route.code!=='Ok')throw new Error('Nie udało się wyznaczyć trasy');const r=route.routes[0],coords=r.geometry.coordinates;const candidates=state.stations.map(s=>({...s,corridor:nearestDistanceToRoute(s,coords)})).filter(s=>s.corridor<=7&&Number(s.prices[state.fuel])>0);const car=activeCar();const ranked=candidates.map(s=>{const price=Number(s.prices[state.fuel]),detour=s.corridor*2,extra=car?detour*Number(car.consumption)/100*price:0,total=price*state.liters+extra;return{...s,price,detour,extra,total}}).sort((a,b)=>a.total-b.total);const best=ranked[0];if(!best){$('routeResult').innerHTML=`<div class="empty-card">Trasa ma ${(r.distance/1000).toFixed(0)} km, ale w naszej bazie nie ma jeszcze stacji z aktualną ceną ${fuelLabel(state.fuel)} blisko tej trasy.</div>`;return}$('routeResult').innerHTML=`<div class="route-summary"><strong>${(r.distance/1000).toFixed(0)} km · ${Math.round(r.duration/60)} min</strong><span>Analiza dla ${state.liters} l ${fuelLabel(state.fuel)}</span></div><div class="route-station"><span class="eyebrow">NAJLEPSZY POSTÓJ</span><h4>${esc(best.name)}</h4><p>${fmt(best.price)} zł/l · ok. ${best.detour.toFixed(1).replace('.',',')} km od trasy</p><p>${car?'Koszt dodatkowego dojazdu ok. '+best.extra.toFixed(2).replace('.',',')+' zł':'Dodaj samochód, aby policzyć koszt zjazdu.'}</p><button class="primary wide route-nav" data-id="${best.id}" style="margin-top:9px">Nawiguj do stacji</button></div>`}catch(e){console.warn(e);$('routeResult').innerHTML=`<div class="empty-card">${esc(e.message||'Nie udało się wyznaczyć trasy.')}</div>`}}
+
+const slides=[
+ {title:'Najlepsze tankowanie',text:'Tanko porównuje ceny, odległość i spalanie Twojego samochodu.',visual:'<div class="tutorial-map"><span class="tutorial-pin">●</span></div>'},
+ {title:'Zrób zdjęcie pylonu',text:'OCR odczyta ceny. Ty zawsze zatwierdzasz wynik przed publikacją.',visual:'<div class="tutorial-camera">▣</div>'},
+ {title:'Punkty wpadają do portfela',text:'Aktualizuj ceny i zdobywaj punkty. Nagrody za punkty pojawią się wkrótce.',visual:'<div class="tutorial-wallet">◫<span class="tutorial-coin">●</span></div>'},
+ {title:'Tankowanie po trasie',text:'Wpisz cel podróży, a Tanko wskaże opłacalną stację po drodze.',visual:'<div class="tutorial-route"><span class="mini-car">🚗</span><span class="mini-pin">●</span></div>'}
+];
+function showOnboarding(force=false){if(!force&&(state.profile?.onboarding_completed||localStorage.getItem('tanko_onboarding_completed')==='1'))return;state.onboardingIndex=0;renderOnboarding();const d=$('onboardingDialog');if(!d.open)d.showModal()}
+function renderOnboarding(){const s=slides[state.onboardingIndex];$('onboardingSlides').innerHTML=`<div class="slide"><div class="slide-visual">${s.visual}</div><span class="eyebrow">${state.onboardingIndex+1} / ${slides.length}</span><h2>${s.title}</h2><p>${s.text}</p></div>`;$('onboardingDots').innerHTML=slides.map((_,i)=>`<i class="${i===state.onboardingIndex?'active':''}"></i>`).join('');$('onboardingNext').textContent=state.onboardingIndex===slides.length-1?'Zaczynam':'Dalej'}
+function finishOnboarding(){const d=$('onboardingDialog');if(d.open)d.close();localStorage.setItem('tanko_onboarding_completed','1');if(state.profile)state.profile.onboarding_completed=true;if(state.user)sb.from('profiles').update({onboarding_completed:true}).eq('id',state.user.id).then(()=>{});renderProfile()}
+
+function startPriceForStation(stationId){const s=state.stations.find(x=>String(x.id)===String(stationId));if(!s)return;state.selectedStation=s;const d=$('stationDetailsDialog');if(d.open)d.close();showScreen('addScreen');fillStationSelect();$('reportStation').value=String(s.id);$('selectedPriceStation').innerHTML=`<strong>${esc(s.name)}</strong><span>${esc(s.address||'')}</span>`;$('selectedPriceStation').classList.remove('hidden');resetPhotoFlow();setTimeout(()=>document.querySelector('.capture-card')?.scrollIntoView({behavior:'smooth',block:'start'}),50)}
 
 function navigateToStation(s){if(!s)return;window.open(`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,'_blank')}
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.screen===id));if(id==='mapScreen'){setTimeout(()=>{initMap();state.map.invalidateSize()},60)}playSound('tap')}
@@ -123,12 +114,12 @@ $('forgotPassword').onclick=()=>{$('resetEmail').value=$('authEmail').value;$('r
 $('logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload()};
 $('enableLocation').onclick=requestLocation;$('changeLocation').onclick=requestLocation;
 $('carSwitcher').onclick=()=>state.cars.length?$('carPickerDialog').showModal():$('carDialog').showModal();$('addCarBtn').onclick=()=>$('carDialog').showModal();$('closeCar').onclick=()=>$('carDialog').close();$('closeCarPicker').onclick=()=>$('carPickerDialog').close();$('carForm').onsubmit=e=>{e.preventDefault();addCar()};
-document.addEventListener('click',e=>{const c=e.target.closest('.choose-car,.pick-car');if(c)setActiveCar(c.dataset.id);const d=e.target.closest('.remove-car');if(d)deleteCar(d.dataset.id);const os=e.target.closest('.open-station,.fav-open');if(os)openStationDetails(os.dataset.id);const po=e.target.closest('[data-open]');if(po)openStationDetails(po.dataset.open);const pc=e.target.closest('[data-confirm]');if(pc)confirmPrice(pc.dataset.confirm);const fn=e.target.closest('.fav-notify');if(fn){const f=state.favorites.get(String(fn.dataset.id));setFavoriteNotify(fn.dataset.id,!f?.notify_new_price)}const rr=e.target.closest('[data-report][data-action]');if(rr)updateAdminReport(rr.dataset.report,rr.dataset.action);const rn=e.target.closest('.route-nav');if(rn){const s=state.stations.find(x=>String(x.id)===String(rn.dataset.id));navigateToStation(s)}const ds=e.target.closest('[data-delete-station]');if(ds)deleteStationAdmin(ds.dataset.deleteStation)});
+document.addEventListener('click',e=>{const c=e.target.closest('.choose-car,.pick-car');if(c)setActiveCar(c.dataset.id);const d=e.target.closest('.remove-car');if(d)deleteCar(d.dataset.id);const os=e.target.closest('.open-station,.fav-open');if(os)openStationDetails(os.dataset.id);const po=e.target.closest('[data-open]');if(po)openStationDetails(po.dataset.open);const pc=e.target.closest('[data-confirm]');if(pc)confirmPrice(pc.dataset.confirm);const fn=e.target.closest('.fav-notify');if(fn){const f=state.favorites.get(String(fn.dataset.id));setFavoriteNotify(fn.dataset.id,!f?.notify_new_price)}const rr=e.target.closest('[data-report][data-action]');if(rr)updateAdminReport(rr.dataset.report,rr.dataset.action);const rn=e.target.closest('.route-nav');if(rn){const s=state.stations.find(x=>String(x.id)===String(rn.dataset.id));navigateToStation(s)}const ds=e.target.closest('[data-delete-station]');if(ds)deleteStationAdmin(ds.dataset.deleteStation,ds.dataset.reportAfterDelete||null);const ap=e.target.closest('[data-add-price]');if(ap)startPriceForStation(ap.dataset.addPrice)});
 document.querySelectorAll('.fuel').forEach(b=>b.onclick=()=>{state.fuel=b.dataset.fuel;savePrefs();renderAll()});$('minusLiters').onclick=()=>{state.liters=Math.max(5,state.liters-5);savePrefs();renderHome()};$('plusLiters').onclick=()=>{state.liters=Math.min(100,state.liters+5);savePrefs();renderHome()};
 document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>showScreen(b.dataset.screen));$('showAllMap').onclick=()=>showScreen('mapScreen');$('centerMap').onclick=()=>{if(state.location)state.map?.setView([state.location.lat,state.location.lng],14);else requestLocation()};
 $('addStationBtn').onclick=openStationDialog;$('closeStation').onclick=()=>$('stationDialog').close();$('stationSearchAddress').onclick=findStationAddress;$('stationUseLocation').onclick=()=>{if(!state.location)return requestLocation();state.stationPickerMap?.setView([state.location.lat,state.location.lng],17);setStationPickerPoint(state.location.lat,state.location.lng)};$('stationForm').onsubmit=e=>{e.preventDefault();addManualStation()};
 $('pylonPhoto').onchange=e=>{if(e.target.files?.[0])runOCR(e.target.files[0])};$('manualPriceBtn').onclick=()=>{state.ocrSource='manual';state.photoFile=null;$('ocrPanel').classList.remove('hidden');$('photoPreview').classList.add('hidden');$('ocrStatus').classList.remove('hidden');$('ocrStatus').textContent='Wpisz ceny, które widzisz na stacji.';makeOcrFields()};$('retakePhoto').onclick=()=>{resetPhotoFlow();$('pylonPhoto').click()};$('cancelPhoto').onclick=resetPhotoFlow;$('savePrices').onclick=savePrices;
-$('bestFavorite').onclick=()=>toggleFavorite(state.selectedStation);$('navigateBest').onclick=()=>navigateToStation(state.selectedStation);$('openBestDetails').onclick=()=>state.selectedStation&&openStationDetails(state.selectedStation.id);$('closeStationDetails').onclick=()=>$('stationDetailsDialog').close();$('detailsFavorite').onclick=()=>toggleFavorite(state.selectedStation);$('detailsNavigate').onclick=()=>navigateToStation(state.selectedStation);$('detailsReport').onclick=()=>{$('stationDetailsDialog').close();$('reportDialog').showModal()};$('closeReport').onclick=()=>$('reportDialog').close();$('reportForm').onsubmit=e=>{e.preventDefault();submitStationReport()};
+$('bestFavorite').onclick=()=>toggleFavorite(state.selectedStation);$('navigateBest').onclick=()=>navigateToStation(state.selectedStation);$('openBestDetails').onclick=()=>state.selectedStation&&openStationDetails(state.selectedStation.id);$('closeStationDetails').onclick=()=>$('stationDetailsDialog').close();$('detailsAddPrice').onclick=()=>state.selectedStation&&startPriceForStation(state.selectedStation.id);$('detailsFavorite').onclick=()=>toggleFavorite(state.selectedStation);$('detailsNavigate').onclick=()=>navigateToStation(state.selectedStation);$('detailsReport').onclick=()=>{$('stationDetailsDialog').close();$('reportDialog').showModal()};$('closeReport').onclick=()=>$('reportDialog').close();$('reportForm').onsubmit=e=>{e.preventDefault();submitStationReport()};
 $('enableFavoriteNotify').onclick=()=>setFavoriteNotify(state.selectedFavoriteStation.id,true);$('skipFavoriteNotify').onclick=()=>$('favoriteNotifyDialog').close();
 $('routeHero').onclick=$('mapRouteFab').onclick=()=>{$('routeResult').innerHTML='';$('routeDialog').showModal()};$('closeRoute').onclick=()=>$('routeDialog').close();$('calculateRoute').onclick=calculateRoute;
 $('changeNickname').onclick=()=>{$('nicknameInput').value=state.profile?.nickname||'';$('nicknameDialog').showModal()};$('closeNickname').onclick=()=>$('nicknameDialog').close();$('nicknameForm').onsubmit=async e=>{e.preventDefault();const nickname=$('nicknameInput').value.trim();if(nickname.length<2)return toast('Nick musi mieć co najmniej 2 znaki.');const {error}=await sb.from('profiles').update({nickname}).eq('id',state.user.id);if(error)return toast(error.message);state.profile.nickname=nickname;$('nicknameDialog').close();renderAll();toast('Nick został zmieniony.')};
@@ -145,48 +136,28 @@ $('pointsChip').onclick=()=>showScreen('rankingScreen');
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.deferredInstall=e;$('installBanner').classList.remove('hidden')});$('installBtn').onclick=async()=>{if(!state.deferredInstall)return;state.deferredInstall.prompt();await state.deferredInstall.userChoice;state.deferredInstall=null;$('installBanner').classList.add('hidden')};$('installDismiss').onclick=()=>{$('installBanner').classList.add('hidden');localStorage.setItem('tanko_install_dismissed',Date.now())};
 if(localStorage.getItem('tanko_install_dismissed')&&Date.now()-Number(localStorage.getItem('tanko_install_dismissed'))<7*864e5)$('installBanner').classList.add('hidden');
 
-
-
-// Tanko 1.1.1 UI safety helpers
-if (typeof window.renderOnboarding !== 'function') {
-  window.renderOnboarding = function(){
-    const slidesArr = Array.from(document.querySelectorAll('#onboardingDialog .slide'));
-    slidesArr.forEach((s,i)=>s.classList.toggle('hidden',i!==state.onboardingIndex));
-    document.querySelectorAll('#onboardingDialog .dots i').forEach((d,i)=>d.classList.toggle('active',i===state.onboardingIndex));
-    const next=$('onboardingNext'); if(next) next.textContent=state.onboardingIndex>=slidesArr.length-1?'Zaczynamy':'Dalej';
-  };
-}
-if (typeof window.showOnboarding !== 'function') {
-  window.showOnboarding = function(force=false){
-    if(!force && (state.profile?.onboarding_completed || localStorage.getItem('tanko_onboarding_completed')==='1')) return;
-    state.onboardingIndex=0; window.renderOnboarding();
-    const dlg=$('onboardingDialog'); if(dlg && !dlg.open) dlg.showModal();
-  };
-}
-if (typeof window.finishOnboarding !== 'function') {
-  window.finishOnboarding = function(){
-    const dlg=$('onboardingDialog'); if(dlg?.open) dlg.close();
-    localStorage.setItem('tanko_onboarding_completed','1');
-    if(state.profile){state.profile.onboarding_completed=true; renderProfile();}
-    if(state.user) sb.from('profiles').update({onboarding_completed:true}).eq('id',state.user.id).then(()=>{}).catch(()=>{});
-  };
-}
-
-const profileSettings = document.querySelector('#profileScreen .settings-card');
-if(profileSettings){
-  profileSettings.addEventListener('click', async (e)=>{
-    const btn=e.target.closest('button'); if(!btn) return;
-    e.stopPropagation();
-    const id=btn.id;
-    if(id==='changeNickname'){ $('nicknameInput').value=state.profile?.nickname||''; if(!$('nicknameDialog').open)$('nicknameDialog').showModal(); }
-    else if(id==='changePassword'){ $('changePasswordForm').reset(); if(!$('changePasswordDialog').open)$('changePasswordDialog').showModal(); }
-    else if(id==='themeButton'){ if(!$('themeDialog').open)$('themeDialog').showModal(); applyTheme(state.theme); }
-    else if(id==='infoCorner'){ if(!$('infoDialog').open)$('infoDialog').showModal(); }
-    else if(id==='showTutorial'){ window.showOnboarding(true); }
-  }, {capture:false});
-}
-
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(state.theme==='system')applyTheme('system')});applyTheme(state.theme);
+
+
+// Robust UI controller: one place for profile actions and every dialog close button.
+const SAFE_DIALOGS={closeCar:'carDialog',closeCarPicker:'carPickerDialog',closeStation:'stationDialog',closeStationDetails:'stationDetailsDialog',closeReport:'reportDialog',closeRoute:'routeDialog',closeAdmin:'adminDialog',closeNickname:'nicknameDialog',closeChangePassword:'changePasswordDialog',closeTheme:'themeDialog',closeInfo:'infoDialog',closeReset:'resetDialog'};
+document.addEventListener('click',async e=>{
+  const closeBtn=e.target.closest('.icon-btn[id]');
+  if(closeBtn&&SAFE_DIALOGS[closeBtn.id]){e.preventDefault();e.stopImmediatePropagation();const d=$(SAFE_DIALOGS[closeBtn.id]);if(d?.open)d.close();return}
+  const btn=e.target.closest('#profileScreen .settings-card button'); if(!btn)return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if(btn.id==='changeNickname'){$('nicknameInput').value=state.profile?.nickname||'';const d=$('nicknameDialog');if(!d.open)d.showModal()}
+  else if(btn.id==='changePassword'){$('changePasswordForm').reset();const d=$('changePasswordDialog');if(!d.open)d.showModal()}
+  else if(btn.id==='themeButton'){const d=$('themeDialog');if(!d.open)d.showModal();applyTheme(state.theme)}
+  else if(btn.id==='infoCorner'){const d=$('infoDialog');if(!d.open)d.showModal()}
+  else if(btn.id==='showTutorial'){showOnboarding(true)}
+  else if(btn.id==='soundToggle'){const next=!state.profile?.sounds_enabled;const {error}=await sb.from('profiles').update({sounds_enabled:next}).eq('id',state.user.id);if(error)return toast(error.message);state.profile.sounds_enabled=next;if(next)playSound('success');renderProfile()}
+  else if(btn.id==='changeLocation'){requestLocation()}
+  else if(btn.id==='logoutBtn'){await sb.auth.signOut();location.reload()}
+},true);
+// Click on a dialog backdrop closes it too (except onboarding).
+document.querySelectorAll('dialog:not(#onboardingDialog)').forEach(d=>d.addEventListener('click',e=>{if(e.target===d&&d.open)d.close()}));
+
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(console.warn);
 sb.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session?.user&&!state.user)bootUser(session.user)});
 handleAuth();

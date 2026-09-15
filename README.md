@@ -49,3 +49,7 @@ Po ustawieniu adres pokaże się w **Profil → Kącik informacyjny**.
 - admin może usunąć stację oznaczoną jako duplikat,
 - punkty są naliczane poprawnie,
 - zablokowane powiększanie całej strony, mapa zachowuje własny zoom.
+
+
+## 1.1.2 UI fix
+Naprawiono menu profilu, wszystkie przyciski X w dialogach, dodawanie ceny bezpośrednio ze szczegółów i mapy oraz przywrócono brakujące funkcje OCR, ręcznego dodawania stacji, trasy i panelu admina. Supabase: bez zmian.
