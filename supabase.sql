@@ -10,12 +10,14 @@ create table if not exists public.profiles (
   role text not null default 'user' check (role in ('user','admin')),
   onboarding_completed boolean not null default false,
   sounds_enabled boolean not null default true,
+  theme text not null default 'system' check (theme in ('system','light','dark')),
   created_at timestamptz not null default now()
 );
 alter table public.profiles add column if not exists reputation numeric(5,2) not null default 1.00;
 alter table public.profiles add column if not exists role text not null default 'user';
 alter table public.profiles add column if not exists onboarding_completed boolean not null default false;
 alter table public.profiles add column if not exists sounds_enabled boolean not null default true;
+alter table public.profiles add column if not exists theme text not null default 'system';
 
 create table if not exists public.cars (
   id uuid primary key default gen_random_uuid(),
@@ -144,7 +146,9 @@ using (auth.uid()=id) with check (auth.uid()=id);
 -- Użytkownik może zmieniać swoje ustawienia, ale nie może sam nadać sobie admina, punktów ani reputacji.
 create or replace function public.protect_profile_fields() returns trigger language plpgsql as $$
 begin
-  if auth.uid() is not null and auth.uid()=old.id then
+  -- Bezpośrednia aktualizacja profilu przez użytkownika nie może zmienić pól systemowych.
+  -- Aktualizacja wywołana wewnątrz triggera punktów ma pg_trigger_depth() > 1 i jest dozwolona.
+  if pg_trigger_depth() <= 1 and auth.uid() is not null and auth.uid()=old.id then
     new.role:=old.role;
     new.points:=old.points;
     new.reputation:=old.reputation;
@@ -165,6 +169,8 @@ DROP POLICY IF EXISTS "authenticated add stations" ON public.stations;
 create policy "authenticated add stations" on public.stations for insert to authenticated with check (true);
 DROP POLICY IF EXISTS "admins update stations" ON public.stations;
 create policy "admins update stations" on public.stations for update to authenticated using (public.is_admin()) with check (public.is_admin());
+DROP POLICY IF EXISTS "admins delete stations" ON public.stations;
+create policy "admins delete stations" on public.stations for delete to authenticated using (public.is_admin());
 
 -- PRICE REPORTS
 DROP POLICY IF EXISTS "reports readable by everyone" ON public.price_reports;
@@ -196,6 +202,7 @@ grant select on public.profiles,public.stations,public.price_reports,public.stat
 grant select,insert,update,delete on public.cars,public.favorite_stations,public.recent_stations to authenticated;
 grant select,insert on public.station_reports to authenticated;
 grant update on public.station_reports, public.stations to authenticated;
+grant delete on public.stations to authenticated;
 grant insert on public.stations,public.price_reports to authenticated;
 grant select on public.point_events to authenticated;
 grant usage,select on all sequences in schema public to authenticated;
@@ -211,12 +218,43 @@ end;$$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 
+-- Potwierdzenie ceny tylko przy stacji + ochrona przed spamem potwierdzeń
+create or replace function public.validate_price_report_location() returns trigger
+language plpgsql security definer set search_path=public as $$
+declare slat double precision; slng double precision; d double precision;
+begin
+  if new.source='confirmation' then
+    if new.latitude is null or new.longitude is null then
+      raise exception 'Włącz GPS. Cenę można potwierdzić tylko będąc przy stacji.';
+    end if;
+    select latitude,longitude into slat,slng from public.stations where id=new.station_id;
+    d := 6371 * 2 * asin(sqrt(
+      power(sin(radians(new.latitude-slat)/2),2) +
+      cos(radians(slat))*cos(radians(new.latitude))*power(sin(radians(new.longitude-slng)/2),2)
+    ));
+    if d > 0.5 then
+      raise exception 'Jesteś za daleko od stacji, aby potwierdzić cenę.';
+    end if;
+    if exists(select 1 from public.price_reports pr where pr.user_id=new.user_id and pr.station_id=new.station_id and pr.source='confirmation' and pr.created_at > now()-interval '30 minutes') then
+      raise exception 'Tę cenę potwierdzałeś niedawno. Spróbuj później.';
+    end if;
+    new.is_verified:=true;
+  end if;
+  return new;
+end;$$;
+drop trigger if exists validate_price_report_location_trigger on public.price_reports;
+create trigger validate_price_report_location_trigger before insert on public.price_reports for each row execute procedure public.validate_price_report_location();
+
 -- Punkty po zgłoszeniu ceny
 create or replace function public.award_report_points() returns trigger language plpgsql security definer set search_path=public as $$
-declare p integer;
+declare p integer; cooldown interval;
 begin
   if new.user_id is null then return new; end if;
   p:=case new.source when 'photo' then 10 when 'confirmation' then 2 when 'manual' then 5 else 0 end;
+  cooldown:=case new.source when 'photo' then interval '2 hours' when 'manual' then interval '1 hour' else interval '30 minutes' end;
+  if exists(select 1 from public.price_reports pr where pr.id<>new.id and pr.user_id=new.user_id and pr.station_id=new.station_id and pr.source=new.source and pr.created_at > now()-cooldown) then
+    p:=0;
+  end if;
   if p>0 then
     insert into public.point_events(user_id,points,reason,price_report_id) values(new.user_id,p,new.source,new.id);
     update public.profiles

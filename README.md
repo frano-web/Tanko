@@ -1,69 +1,51 @@
-# Tanko 1.0
+# Tanko 1.1 — poprawki po testach
 
-Mobilna aplikacja PWA hostowana na GitHub Pages, z Supabase jako backendem.
+## 1. GitHub Pages
+Wgraj **całą zawartość tego folderu** do repozytorium `Tanko` (pliki mają być w głównym katalogu repozytorium). Ikony są teraz również w katalogu głównym, dlatego favicon i ikona PWA nie zależą od folderu `icons/`.
 
-## 1. Wgraj pliki na GitHub Pages
-Podmień całą zawartość repozytorium `Tanko` plikami z tego folderu. Nie pomijaj `sw.js`, bo zmieniono wersję cache.
+Po wdrożeniu na komputerze użyj `Ctrl+Shift+R`. Na telefonie przy zmianie ikony usuń starą ikonę PWA z ekranu i dodaj aplikację ponownie.
 
-## 2. Uruchom migrację Supabase
-Supabase → SQL Editor → New query → wklej CAŁY `supabase.sql` → Run.
+## 2. Supabase — wymagany patch
+Masz już działającą bazę 1.0, więc **nie musisz uruchamiać całego supabase.sql od nowa**.
 
-Migracja dodaje:
-- trwałe samochody użytkownika,
-- ulubione stacje,
-- preferencje powiadomień,
-- historię cen,
-- reputację użytkownika,
-- zgłoszenia błędów stacji,
-- rolę administratora i skrzynkę zgłoszeń,
-- onboarding i ustawienie dźwięków,
-- punktację naliczaną po stronie bazy.
+Wejdź do **Supabase → SQL Editor → New query**, wklej zawartość pliku:
 
-## 3. Nadaj sobie administratora
-Po uruchomieniu migracji wykonaj osobne zapytanie, podając e-mail konta, które ma być adminem:
+`supabase_patch_1_1.sql`
 
-```sql
-update public.profiles
-set role = 'admin'
-where id = (select id from auth.users where email = 'TU_WPISZ_EMAIL_ADMINA');
+i kliknij **Run**.
+
+Patch:
+- naprawia naliczanie punktów,
+- dodaje tryb jasny/ciemny/systemowy,
+- pozwala adminowi usuwać zduplikowane stacje,
+- wymaga GPS przy potwierdzaniu ceny i odległości maks. 500 m,
+- blokuje szybkie wielokrotne nabijanie punktów na tej samej stacji.
+
+## 3. Kontakt biznesowy
+W `config.js` jest pole:
+
+```js
+BUSINESS_EMAIL: ''
 ```
 
-Po ponownym zalogowaniu w profilu pojawi się przycisk **Admin**.
+Wpisz tam adres do współprac, np.:
 
-## 4. Authentication → URL Configuration
-Site URL:
-`https://frano-web.github.io/Tanko/`
+```js
+BUSINESS_EMAIL: 'kontakt@twojadomena.pl'
+```
 
-Redirect URLs:
-- `https://frano-web.github.io/Tanko/`
-- `https://frano-web.github.io/Tanko/reset-password.html`
-- `https://frano-web.github.io/Tanko/**`
+Po ustawieniu adres pokaże się w **Profil → Kącik informacyjny**.
 
-## 5. Co działa w tej wersji
-- logowanie, rejestracja i reset hasła przez link,
-- samochody zapisane w Supabase + aktywne auto,
-- mapa OpenStreetMap i import pobliskich stacji przez Overpass,
-- ręczne dodawanie brakującej stacji,
-- OCR pylonu przez Tesseract.js bez losowych cen,
-- TOP 3 opłacalnych stacji z kosztem dojazdu,
-- poziom wiarygodności ceny,
-- ulubione stacje,
-- pytanie o powiadomienia po dodaniu ulubionej,
-- historia ceny z 30 dni,
-- ranking wyłącznie prawdziwych kont,
-- punkty, reputacja i animacja portfela,
-- zgłoszenia błędów do skrzynki administratora,
-- tryb trasy z OSRM + Nominatim,
-- onboarding z animacjami,
-- dźwięki aplikacji z przełącznikiem,
-- nowa ikona PWA inspirowana kontrolką rezerwy.
-
-## Ważne o powiadomieniach
-W tej wersji powiadomienie o nowej cenie ulubionej stacji działa przez Supabase Realtime, gdy PWA/aplikacja ma aktywną sesję w przeglądarce. Prawdziwe powiadomienia push działające po całkowitym zamknięciu aplikacji wymagają później Web Push + zapisu `PushSubscription` + funkcji backendowej/Edge Function.
-
-## Źródła map i trasy
-- mapa/stacje: OpenStreetMap + Overpass
-- trasy: publiczny OSRM
-- wyszukiwanie celu: Nominatim
-
-Do produkcji przy większym ruchu warto przejść z publicznych endpointów na własny/komercyjny routing/geocoding, żeby nie zależeć od limitów usług społecznościowych.
+## 4. Najważniejsze poprawki UI
+- placeholdery logowania: „Adres e-mail” i „Hasło”,
+- działające X w formularzu auta i dodawaniu stacji,
+- stacja dodawana pinezką na mapie zamiast ręcznych współrzędnych,
+- zmiana nicku,
+- zmiana hasła w ustawieniach + reset hasła przy logowaniu,
+- tryb jasny / ciemny / systemowy,
+- kącik informacyjny,
+- możliwość anulowania zdjęcia i zrobienia nowego,
+- potwierdzanie cen tylko przy stacji,
+- admin może usunąć stację oznaczoną jako duplikat,
+- punkty są naliczane poprawnie,
+- zablokowane powiększanie całej strony, mapa zachowuje własny zoom.
