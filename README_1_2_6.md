@@ -1,0 +1,1 @@
+Tanko 1.2.6 — wyłącznie wygląd formularza weryfikacji zdjęcia. Podmień wszystkie pliki w katalogu głównym GitHub Pages. Bez zmian w Supabase. Formularz zachowuje te same identyfikatory i obsługę JavaScript.
