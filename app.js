@@ -60,13 +60,9 @@ function renderMap(){
     const color=p?(conf.cls==='high'?'#0f8f5b':conf.cls==='mid'?'#d39a16':'#b54444'):'#64748b';
     const icon=L.divIcon({className:'',html:`<div class="map-price-pin" style="--pin:${color}">${p?fmt(p):'—'}</div>`,iconSize:[52,32],iconAnchor:[26,16]});
     const marker=L.marker([s.lat,s.lng],{icon}).addTo(state.map);
-    // Na mapie pokazuj OD RAZU wszystkie rodzaje paliwa, a nie tylko wybrane na pulpicie.
-    const rows=STANDARD_FUELS.map(f=>{
-      const v=s.prices[f];const available=v!=null&&Number.isFinite(Number(v))&&Number(v)>0;
-      return `<div class="map-fuel-row ${f===state.fuel?'map-fuel-row-selected':''}"><span>${fuelLabel(f)}</span><strong>${available?fmt(v)+' zł/l':'Brak ceny'}</strong></div>`;
-    }).join('');
-    const hasKnownPrice=STANDARD_FUELS.some(f=>Number(s.prices[f])>0);
-    marker.bindPopup(`<div class="map-popup map-popup-full"><b>${esc(s.name)}</b><small>${esc(s.address||'')}</small><div class="map-fuel-table" aria-label="Ceny wszystkich paliw">${rows}</div><small>${hasKnownPrice?'Ostatnia aktualizacja: '+humanAge(s.updatedAt):'Brak zgłoszonych cen'}</small><div class="popup-actions"><button type="button" class="popup-open" data-open="${s.id}">Szczegóły</button><button type="button" class="popup-add-price" data-add-price="${s.id}">Dodaj cenę</button>${hasKnownPrice?`<button type="button" class="popup-confirm" data-confirm="${s.id}">Potwierdź ceny</button>`:''}</div></div>`,{maxWidth:320,minWidth:235,autoPan:true});
+    // Kliknięcie pinezki otwiera bezpośrednio pełne szczegóły stacji (wszystkie paliwa),
+    // zamiast starego, uproszczonego popupu Leaflet z jedną ceną.
+    marker.on('click',()=>openStationDetails(s.id));
     state.markers.push(marker);
   }
   if(state.location){L.circleMarker([state.location.lat,state.location.lng],{radius:7,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(state.map)}
@@ -84,14 +80,51 @@ async function setFavoriteNotify(stationId,on){if(on&&'Notification'in window&&N
 async function openStationDetails(id){const s=state.stations.find(x=>String(x.id)===String(id));if(!s)return;state.selectedStation=s;$('detailsName').textContent=s.name;await sb.from('recent_stations').upsert({user_id:state.user.id,station_id:s.id,last_opened_at:new Date().toISOString()});const c=confidence(s);const rows=Object.keys(FUEL_LABEL).map(f=>`<div class="fuel-price-cell ${f===state.fuel?'selected':''}"><span>${FUEL_LABEL[f]}</span><strong>${s.prices[f]==null?'—':fmt(s.prices[f])+' zł/l'}</strong></div>`).join('');$('detailsBody').innerHTML=`<div class="station-fuel-table">${rows}</div><div class="details-meta compact-meta"><div><span>AKTUALIZACJA</span><strong>${humanAge(s.updatedAt)}</strong></div><div><span>WIARYGODNOŚĆ</span><strong>${c.label}</strong></div><div><span>POTWIERDZENIA</span><strong>${s.confirmations||0}</strong></div></div><p class="history-note">${esc(s.address||'Brak adresu')} · źródło ceny: ${esc(s.priceSource||'brak')}</p>`;$('detailsFavorite').textContent=state.favorites.has(String(s.id))?'★ Usuń z ulubionych':'☆ Dodaj do ulubionych';$('stationDetailsDialog').showModal();await loadPriceHistory(s.id)}
 async function loadPriceHistory(stationId){const since=new Date(Date.now()-30*864e5).toISOString();const {data}=await sb.from('price_reports').select('prices,created_at').eq('station_id',stationId).gte('created_at',since).order('created_at');const pts=(data||[]).map(x=>({x:new Date(x.created_at).getTime(),y:Number(x.prices?.[state.fuel])})).filter(x=>x.y>0);if(state.chart)state.chart.destroy();const ctx=$('priceChart');state.chart=new Chart(ctx,{type:'line',data:{datasets:[{label:fuelLabel(state.fuel),data:pts,borderColor:'#0f8f5b',backgroundColor:'rgba(15,143,91,.08)',fill:true,tension:.3,pointRadius:2}]},options:{parsing:false,responsive:true,plugins:{legend:{display:false}},scales:{x:{type:'linear',ticks:{callback:v=>new Date(v).toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'}),maxTicksLimit:5}},y:{ticks:{callback:v=>Number(v).toFixed(2)}}}}})}
 
-async function confirmPrice(id){const s=state.stations.find(x=>String(x.id)===String(id));if(!s)return;if(!state.location)return toast('Włącz GPS. Cenę można potwierdzić tylko będąc przy stacji.');const d=hav(state.location,{lat:s.lat,lng:s.lng});if(d>0.5)return toast(`Jesteś za daleko od stacji (${d.toFixed(1).replace('.',',')} km). Podejdź bliżej, aby potwierdzić cenę.`);const prices={};for(const f of Object.keys(FUEL_LABEL))if(Number(s.prices[f])>0)prices[f]=Number(s.prices[f]);const {error}=await sb.from('price_reports').insert({station_id:s.id,user_id:state.user.id,prices,latitude:state.location.lat,longitude:state.location.lng,source:'confirmation'});if(error)return toast(error.message);toast('Cena potwierdzona. +5 pkt');playSound('success');await Promise.all([loadStations(),loadProfile(),loadRanking()])}
-
-
+async function freshLocation(){
+  if(!navigator.geolocation)throw Error('Włącz lokalizację GPS.');
+  return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(
+    p=>{if(p.coords.accuracy>80)return reject(Error(`Lokalizacja jest zbyt niedokładna (±${Math.round(p.coords.accuracy)} m). Wyjdź na zewnątrz i spróbuj ponownie.`));
+      state.location={lat:p.coords.latitude,lng:p.coords.longitude};resolve(state.location)},
+    ()=>reject(Error('Nie udało się pobrać aktualnej lokalizacji GPS.')),
+    {enableHighAccuracy:true,maximumAge:0,timeout:15000}));
+}
+async function locationNearStation(s,limitMeters){
+  const pos=await freshLocation();const meters=Math.round(hav(pos,{lat:s.lat,lng:s.lng})*1000);
+  if(meters>limitMeters)throw Error(`Jesteś ${meters} m od stacji. Maksymalna odległość: ${limitMeters} m.`);
+  return pos;
+}
+async function confirmPrice(id){
+  const s=state.stations.find(x=>String(x.id)===String(id));if(!s)return;
+  try{
+    const pos=await locationNearStation(s,80);
+    const {data:latest,error:readError}=await sb.from('price_reports').select('id,user_id,source,prices').eq('station_id',s.id).in('source',['photo','manual']).order('created_at',{ascending:false}).limit(1);
+    if(readError)throw readError;
+    if(!latest?.length)throw Error('Nie ma jeszcze ceny do potwierdzenia.');
+    if(String(latest[0].user_id)===String(state.user.id))throw Error('Nie możesz potwierdzić własnej ceny.');
+    const prices=latest[0].prices||{};
+    const {error}=await sb.from('price_reports').insert({station_id:s.id,user_id:state.user.id,prices,latitude:pos.lat,longitude:pos.lng,source:'confirmation'});
+    if(error)throw error;
+    toast('Cena potwierdzona. +5 pkt');playSound('success');await Promise.all([loadStations(),loadProfile(),loadRanking()]);
+  }catch(e){toast(e.message||'Nie udało się potwierdzić ceny.')}
+}
 
 function makeOcrFields(values={}){const fuels=vehicleFuels();$('ocrFields').innerHTML=fuels.map(f=>`<div class="ocr-row"><strong>${FUEL_LABEL[f]}</strong><input class="ocr-price" data-fuel="${f}" inputmode="decimal" placeholder="np. 5,99" value="${values[f]?String(values[f]).replace('.',','):''}" /></div>`).join('')}
 function parseOCR(text){const lines=text.toUpperCase().split(/\n+/).map(x=>x.replace(/,/g,'.').trim()).filter(Boolean);const out={};const patterns={pb95:/(PB\s*95|95\s*E?10|E10)/,pb98:/(PB\s*98|98\s*E?5|E5)/,on:/(\bON\b|DIESEL|OLEJ)/,lpg:/(LPG|GAZ)/};const priceOf=line=>{const nums=[...line.matchAll(/\b([2-9])(?:[\s.]?)(\d{2})\b/g)].map(m=>Number(`${m[1]}.${m[2]}`)).filter(v=>v>=2&&v<=12);return nums[nums.length-1]||null};for(let i=0;i<lines.length;i++){for(const [f,re] of Object.entries(patterns)){if(re.test(lines[i])){let p=priceOf(lines[i]);if(!p&&lines[i+1])p=priceOf(lines[i+1]);if(p)out[f]=p}}}return out}
 async function runOCR(file){state.photoFile=file;state.ocrSource='photo';$('ocrPanel').classList.remove('hidden');$('photoPreview').src=URL.createObjectURL(file);$('photoPreview').classList.remove('hidden');$('ocrStatus').classList.remove('hidden');$('ocrStatus').textContent='Analizuję zdjęcie… 0%';makeOcrFields();try{const result=await Tesseract.recognize(file,'eng',{logger:m=>{if(m.status==='recognizing text')$('ocrStatus').textContent=`Analizuję zdjęcie… ${Math.round((m.progress||0)*100)}%`}});const text=result.data.text||'';$('ocrRawText').textContent=text;$('ocrRawWrap').classList.remove('hidden');const vals=parseOCR(text);makeOcrFields(vals);const count=Object.keys(vals).length;$('ocrStatus').textContent=count?`Rozpoznano ${count} ${count===1?'cenę':'ceny'}. Sprawdź je przed zapisem.`:'Nie udało się pewnie przypisać cen do paliw. Wpisz wartości ręcznie — aplikacja nie zgaduje.';playSound(count?'success':'error')}catch(e){console.warn(e);$('ocrStatus').textContent='OCR nie zakończył analizy. Wpisz ceny ręcznie.';playSound('error')}}
-async function savePrices(){const stationId=Number($('reportStation').value);if(!stationId)return toast('Wybierz stację.');const prices={};document.querySelectorAll('.ocr-price').forEach(i=>{const v=Number(i.value.replace(',','.'));if(v>=2&&v<=12)prices[i.dataset.fuel]=v});if(!Object.keys(prices).length)return toast('Wpisz przynajmniej jedną cenę.');let photoPath=null;if(state.photoFile){const ext=state.photoFile.name?.split('.').pop()||'jpg';photoPath=`${state.user.id}/${Date.now()}.${ext}`;const up=await sb.storage.from('pylon-photos').upload(photoPath,state.photoFile,{upsert:false});if(up.error)console.warn(up.error)}const {error}=await sb.from('price_reports').insert({station_id:stationId,user_id:state.user.id,prices,latitude:state.location?.lat,longitude:state.location?.lng,source:state.ocrSource,photo_url:photoPath});if(error)return toast(error.message);toast('Ceny zapisane. +20 pkt');playSound('coin');resetPhotoFlow();$('selectedPriceStation').classList.add('hidden');await Promise.all([loadStations(),loadProfile(),loadRanking()])}
+async function savePrices(){
+  const stationId=Number($('reportStation').value);if(!stationId)return toast('Wybierz stację.');
+  const s=state.stations.find(x=>Number(x.id)===stationId);if(!s)return toast('Nie znaleziono stacji.');
+  const prices={};document.querySelectorAll('.ocr-price').forEach(i=>{const v=Number(i.value.replace(',','.'));if(v>=2&&v<=12)prices[i.dataset.fuel]=v});
+  if(!Object.keys(prices).length)return toast('Wpisz przynajmniej jedną cenę.');
+  try{
+    const pos=await locationNearStation(s,100);
+    let photoPath=null;
+    if(state.photoFile){const ext=state.photoFile.name?.split('.').pop()||'jpg';photoPath=`${state.user.id}/${Date.now()}.${ext}`;const up=await sb.storage.from('pylon-photos').upload(photoPath,state.photoFile,{upsert:false});if(up.error)throw up.error}
+    const {error}=await sb.from('price_reports').insert({station_id:stationId,user_id:state.user.id,prices,latitude:pos.lat,longitude:pos.lng,source:state.ocrSource,photo_url:photoPath});
+    if(error)throw error;
+    toast('Ceny zapisane. +20 pkt');playSound('coin');resetPhotoFlow();$('selectedPriceStation').classList.add('hidden');await Promise.all([loadStations(),loadProfile(),loadRanking()]);
+  }catch(e){toast(e.message||'Nie udało się zapisać cen.')}
+}
 
 function setStationPickerPoint(lat,lng){lat=Number(lat);lng=Number(lng);$('stationLat').value=lat.toFixed(6);$('stationLng').value=lng.toFixed(6);$('stationCoordsLabel').textContent=`Pinezka: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;if(!state.stationPickerMap)return;if(!state.stationPickerMarker){state.stationPickerMarker=L.marker([lat,lng],{draggable:true}).addTo(state.stationPickerMap);state.stationPickerMarker.on('dragend',()=>{const p=state.stationPickerMarker.getLatLng();setStationPickerPoint(p.lat,p.lng)})}else state.stationPickerMarker.setLatLng([lat,lng]);}
 function initStationPicker(){const c=state.location||JAROCIN;if(!state.stationPickerMap){state.stationPickerMap=L.map('stationPickerMap',{zoomControl:true}).setView([c.lat,c.lng],15);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.stationPickerMap);state.stationPickerMap.on('click',e=>setStationPickerPoint(e.latlng.lat,e.latlng.lng))}setTimeout(()=>state.stationPickerMap.invalidateSize(),80);setStationPickerPoint(c.lat,c.lng)}

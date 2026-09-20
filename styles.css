@@ -173,3 +173,14 @@ html[data-theme="dark"] .map-fuel-row span,
 html[data-theme="dark"] .map-fuel-row strong{color:#14271b!important}
 html[data-theme="dark"] .map-fuel-row{background:#eff4f0!important;border-color:#dae5dc!important}
 html[data-theme="dark"] .map-fuel-row-selected{background:#dcf4e6!important;border-color:#88d5a8!important}
+
+/* Tanko 1.2.3: czytelne etykiety paliw w trybie systemowym i ciemnym */
+.ocr-panel .ocr-row strong,.ocr-panel .ocr-row label{color:#182c22!important;opacity:1!important}
+.ocr-panel .ocr-row input{color:#182c22;background:#f6faf7;border:1px solid #c5d4ca}
+.ocr-panel .ocr-row input::placeholder{color:#697c70;opacity:1}
+html[data-theme="dark"] .ocr-panel{background:#f8fbf9!important;color:#182c22!important}
+html[data-theme="dark"] .ocr-panel .ocr-row strong,html[data-theme="dark"] .ocr-panel .ocr-row label{color:#182c22!important}
+html[data-theme="dark"] .ocr-panel .ocr-row input{background:#ffffff!important;color:#182c22!important;border-color:#bdcfc3!important}
+html[data-theme="dark"] .ocr-panel h3,html[data-theme="dark"] .ocr-panel .eyebrow{color:#182c22!important}
+.station-fuel-table .fuel-price-cell span{color:#284e3b!important;font-weight:800!important;opacity:1!important}
+html[data-theme="dark"] .station-fuel-table .fuel-price-cell span{color:#e5f6eb!important}
