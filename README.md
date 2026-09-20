@@ -65,3 +65,12 @@ Po podmianie plików na GitHub Pages odśwież stronę (Ctrl+Shift+R).
 
 ### Limity naliczania punktów w istniejącej bazie
 Jeśli wykonano patch 1.2: potwierdzanie tej samej stacji jest blokowane przez trigger przez 30 minut; ręczne zgłoszenia i zdjęcia nie mają w patchu 1.2 dodatkowego limitu punktów ani dziennego limitu dodawania cen. Funkcja bonusu +1 także może przyznać go wielokrotnie temu samemu zdjęciu. Wymaga to osobnej poprawki antyspamowej przed udostępnieniem sklepu z nagrodami.
+
+
+## Aktualizacja 1.2.2: mapa i punktacja
+
+- W dymku po **bezpośrednim kliknięciu pinezki** widoczna jest teraz tabela PB95, PB98, ON i LPG. Brak danych to „Brak ceny”. Dymek ma przyciski Szczegóły i Dodaj cenę.
+- Aby zmienić naliczanie punktów w ISTNIEJĄCEJ bazie, wykonaj tylko `supabase_patch_1_2_2_points.sql` w Supabase → SQL Editor → New query → Run. Nie trzeba uruchamiać starego `supabase_patch_1_2.sql` (ten zawiera również schemat ciężarówek).
+- Punktacja: dodanie ceny 20 pkt, potwierdzenie 5 pkt, bonus autora zdjęcia +1 pkt za potwierdzenie jego zdjęcia przez innego użytkownika (maksymalnie jeden bonus od tego samego potwierdzającego za dane zdjęcie). Obowiązują także zabezpieczenia przed wielokrotnym nabijaniem punktów.
+- SQL nie przelicza historycznych zdarzeń ani nie usuwa użytkowników i danych. Zmienia przyszłe naliczanie.
+- Podmień całą zawartość ZIP w katalogu głównym repozytorium GitHub Pages `/Tanko/`, nie umieszczaj plików wewnątrz dodatkowego folderu. Po publikacji odśwież stronę z pominięciem pamięci podręcznej lub ponownie uruchom PWA.
