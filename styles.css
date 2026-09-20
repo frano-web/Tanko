@@ -184,3 +184,52 @@ html[data-theme="dark"] .ocr-panel .ocr-row input{background:#ffffff!important;c
 html[data-theme="dark"] .ocr-panel h3,html[data-theme="dark"] .ocr-panel .eyebrow{color:#182c22!important}
 .station-fuel-table .fuel-price-cell span{color:#284e3b!important;font-weight:800!important;opacity:1!important}
 html[data-theme="dark"] .station-fuel-table .fuel-price-cell span{color:#e5f6eb!important}
+
+
+/* Tanko 1.2.4 — wspólny system barw i kontrastu. Reguły na końcu arkusza
+   nadpisują historyczne sztywne kolory w obu motywach. */
+:root{color-scheme:light;--field:#fff;--field-ink:#10261b;--field-placeholder:#61736a;--panel-ink:#10261b;--on-brand:#fff;--on-dark:#fff;--nav-muted:#53685b;--error-bg:#fff0f0;--error-ink:#922c2c;--info-bg:#e9f4ed;--info-ink:#244b36}
+html[data-theme="dark"]{color-scheme:dark;--field:#16261d;--field-ink:#f1f8f3;--field-placeholder:#a1b5a9;--panel-ink:#edf6f1;--on-brand:#071b11;--nav-muted:#acbdb2;--error-bg:#392021;--error-ink:#ffc1c1;--info-bg:#193a2a;--info-ink:#d4f4e0}
+.brand-slogan{font-size:15px;font-weight:800;line-height:1.35;letter-spacing:-.02em;color:var(--ink);margin:2px 0 8px}.brand-slogan strong{color:var(--brand-dark)}
+html[data-theme="dark"] .brand-slogan strong{color:#7ce9ae}
+.auth-card,.capture-card,.ocr-panel,.recovery-card,.rank-row,.profile-head,.car-row,.favorite-row,.settings-card,.dialog-form,.station-card,.favorite-mini,.quick-card{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.capture-card{background:linear-gradient(145deg,var(--surface),var(--surface-2))}
+.rewards-card{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+.rewards-card p,.capture-card p,.dialog-form p{color:var(--muted)}
+input,select,textarea,html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea{background:var(--field);color:var(--field-ink);border-color:var(--line)}
+input::placeholder,textarea::placeholder,html[data-theme="dark"] input::placeholder,html[data-theme="dark"] textarea::placeholder{color:var(--field-placeholder);opacity:1}
+label,html[data-theme="dark"] label{color:var(--ink)}
+.ocr-panel,.ocr-panel h3,.ocr-panel .ocr-row strong,.ocr-panel .ocr-row label,html[data-theme="dark"] .ocr-panel,html[data-theme="dark"] .ocr-panel h3,html[data-theme="dark"] .ocr-panel .ocr-row strong,html[data-theme="dark"] .ocr-panel .ocr-row label{background:var(--surface);color:var(--ink)!important}
+.ocr-panel .ocr-row input,html[data-theme="dark"] .ocr-panel .ocr-row input{background:var(--field)!important;color:var(--field-ink)!important;border-color:var(--line)!important}
+.ocr-panel .ocr-row input::placeholder,html[data-theme="dark"] .ocr-panel .ocr-row input::placeholder{color:var(--field-placeholder)!important}
+.ocr-status,.ocr-raw pre,.details-meta div,.route-station,.info-block{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+.ocr-status{background:var(--info-bg);color:var(--info-ink)}
+.ocr-panel .eyebrow,html[data-theme="dark"] .ocr-panel .eyebrow{color:var(--muted)!important}
+.settings-card button,html[data-theme="dark"] .settings-card button{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.settings-card button:last-child,html[data-theme="dark"] .settings-card button:last-child{color:var(--error-ink)}
+.secondary,.small-secondary,.icon-btn,html[data-theme="dark"] .secondary,html[data-theme="dark"] .small-secondary,html[data-theme="dark"] .icon-btn{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+.primary,.camera-btn,.small-primary{background:linear-gradient(135deg,#0f8f5b,#0b6d46);color:#fff}
+html[data-theme="dark"] .primary,html[data-theme="dark"] .camera-btn{background:linear-gradient(135deg,#27b777,#138455);color:#fff}
+.fuel-picker,.segmented,.admin-filters{background:var(--surface-2)}
+.fuel,.seg,html[data-theme="dark"] .fuel-picker .fuel{color:var(--ink)!important;background:transparent!important}
+.fuel.active,.seg.active,html[data-theme="dark"] .fuel-picker .fuel.active{background:var(--surface)!important;color:var(--ink)!important;border:1px solid var(--line);box-shadow:var(--shadow-sm)}
+.liter-control,.fuel-price-cell,.theme-option,html[data-theme="dark"] .liter-control,html[data-theme="dark"] .fuel-price-cell{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+.liter-control strong,.fuel-price-cell strong,html[data-theme="dark"] .liter-control strong,html[data-theme="dark"] .fuel-price-cell strong{color:var(--ink)!important}
+.liter-control button,html[data-theme="dark"] .liter-control button{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.fuel-price-cell span,.station-fuel-table .fuel-price-cell span,html[data-theme="dark"] .station-fuel-table .fuel-price-cell span{color:var(--ink)!important;opacity:1!important}
+.active-car,html[data-theme="dark"] .active-car{background:var(--brand-soft)!important;border-color:var(--brand)!important}
+.choose-car,.fav-notify,.fav-open,.car-icon,.rank-avatar,html[data-theme="dark"] .choose-car,html[data-theme="dark"] .fav-notify,html[data-theme="dark"] .fav-open{background:var(--surface-2);color:var(--ink)}
+.remove-car,.danger-soft,.admin-actions .reject{background:var(--error-bg)!important;color:var(--error-ink)!important}
+.admin-actions .resolve{background:var(--info-bg);color:var(--info-ink)}
+.nav-btn{color:var(--nav-muted)}.nav-btn.active{color:var(--brand-dark)}
+html[data-theme="dark"] .nav-btn.active{color:#78e8ab}
+.add-nav span{background:var(--ink);color:var(--bg)}
+.onboarding,.fullscreen-dialog::backdrop{background:var(--bg)}
+.tutorial-map,.tutorial-camera,.tutorial-wallet,.tutorial-route{background:var(--surface);color:var(--ink)}
+.onboarding-skip{color:var(--ink)}.dots i{background:var(--line)}
+.recovery-page{background:var(--bg)}
+@media(min-width:760px){html[data-theme="dark"] body{background:#06100c}}
+/* Popup mapy celowo pozostaje jasny w obu motywach, z ciemnymi etykietami. */
+.map-popup-full,.map-popup-full *{color:#14271b}
+.map-popup-full .popup-add-price,html[data-theme="dark"] .map-popup-full .popup-add-price{color:#fff}
+:focus-visible{outline:3px solid #50bf86;outline-offset:2px}
