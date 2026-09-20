@@ -53,3 +53,15 @@ Po ustawieniu adres pokaże się w **Profil → Kącik informacyjny**.
 
 ## 1.1.2 UI fix
 Naprawiono menu profilu, wszystkie przyciski X w dialogach, dodawanie ceny bezpośrednio ze szczegółów i mapy oraz przywrócono brakujące funkcje OCR, ręcznego dodawania stacji, trasy i panelu admina. Supabase: bez zmian.
+
+
+## Tanko 1.2.1 — cofnięcie obsługi ciężarówek
+Usunięto wybór samochodu osobowego/ciężarowego oraz dodatkowe paliwa HVO100, LNG, CNG i AdBlue.
+W formularzu dodawania samochodu, na mapie i w tabeli stacji zostają PB95, PB98, ON, LPG.
+Zachowano pełną tabelę 4 paliw, pytanie o nick przy pierwszym logowaniu oraz punktację 20/5/1.
+Nie uruchamiaj ponownie `supabase_patch_1_2.sql`. Zmiana jest tylko w aplikacji.
+Jeżeli patch 1.2 uruchomiono wcześniej, dodatkowa kolumna i rozszerzone wartości w bazie mogą pozostać bez wpływu na tę wersję aplikacji. Nie usuwaj ich, aby uniknąć utraty istniejących danych.
+Po podmianie plików na GitHub Pages odśwież stronę (Ctrl+Shift+R).
+
+### Limity naliczania punktów w istniejącej bazie
+Jeśli wykonano patch 1.2: potwierdzanie tej samej stacji jest blokowane przez trigger przez 30 minut; ręczne zgłoszenia i zdjęcia nie mają w patchu 1.2 dodatkowego limitu punktów ani dziennego limitu dodawania cen. Funkcja bonusu +1 także może przyznać go wielokrotnie temu samemu zdjęciu. Wymaga to osobnej poprawki antyspamowej przed udostępnieniem sklepu z nagrodami.
