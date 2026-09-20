@@ -233,3 +233,6 @@ html[data-theme="dark"] .nav-btn.active{color:#78e8ab}
 .map-popup-full,.map-popup-full *{color:#14271b}
 .map-popup-full .popup-add-price,html[data-theme="dark"] .map-popup-full .popup-add-price{color:#fff}
 :focus-visible{outline:3px solid #50bf86;outline-offset:2px}
+
+/* 1.2.5: rozwijane statystyki rankingu */
+.rank-expand{border-radius:18px;overflow:hidden}.rank-expand summary{cursor:pointer;list-style:none}.rank-expand summary::-webkit-details-marker{display:none}.rank-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:9px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-top:0;border-radius:0 0 16px 16px;font-size:10px}.rank-stats span{display:grid;gap:5px}.rank-stats b{font-size:16px;color:var(--brand)}

@@ -6,7 +6,7 @@ const JAROCIN={lat:51.9727,lng:17.5026};
 const $=id=>document.getElementById(id);
 const FUEL_LABEL={pb95:'PB95',pb98:'PB98',on:'ON',lpg:'LPG'};
 const STANDARD_FUELS=['pb95','pb98','on','lpg'];
-const state={user:null,profile:null,cars:[],activeCarId:null,fuel:localStorage.getItem('tanko_fuel')||'pb95',liters:Number(localStorage.getItem('tanko_liters')||45),location:null,stations:[],favorites:new Map(),ranking:[],map:null,markers:[],deferredInstall:null,authMode:'login',photoFile:null,ocrSource:'photo',selectedStation:null,selectedFavoriteStation:null,chart:null,onboardingIndex:0,adminStatus:'new',realtime:null,stationPickerMap:null,stationPickerMarker:null,theme:localStorage.getItem('tanko_theme')||'system'};
+const state={user:null,profile:null,cars:[],activeCarId:null,fuel:localStorage.getItem('tanko_fuel')||'pb95',liters:Number(localStorage.getItem('tanko_liters')||45),location:null,stations:[],favorites:new Map(),ranking:[],map:null,markers:[],mapLayer:null,mapRenderKey:null,rankingStats:{},deferredInstall:null,authMode:'login',photoFile:null,ocrSource:'photo',selectedStation:null,selectedFavoriteStation:null,chart:null,onboardingIndex:0,adminStatus:'new',realtime:null,stationPickerMap:null,stationPickerMarker:null,theme:localStorage.getItem('tanko_theme')||'system'};
 let audioCtx=null;
 
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
@@ -38,40 +38,97 @@ $('topStations').innerHTML=ranked.slice(0,3).map((s,i)=>`<button class="station-
 function renderFavoriteMini(){const favs=[...state.favorites.values()].map(f=>state.stations.find(s=>String(s.id)===String(f.station_id))).filter(Boolean);if(!favs.length)return'<div class="empty-card" style="min-width:100%">Dodaj gwiazdką stacje, do których często wracasz.</div>';return favs.slice(0,6).map(s=>`<button class="favorite-mini open-station" data-id="${s.id}"><strong>★ ${esc(s.name)}</strong><span>${esc(s.address||'')}</span><b>${fmt(s.prices[state.fuel])} <small>zł/l</small></b></button>`).join('')}
 function renderCars(){const car=activeCar();$('carsList').innerHTML=state.cars.length?state.cars.map(c=>`<div class="car-row ${String(car?.id)===String(c.id)?'active-car':''}"><div class="car-icon">🚗</div><div class="car-copy"><strong>${esc(c.name)}</strong><span>${esc(c.engine||'')} · ${fuelLabel(c.fuel)} · ${Number(c.consumption).toFixed(1)} l/100 km</span></div><div class="car-actions"><button class="choose-car" data-id="${c.id}">${String(car?.id)===String(c.id)?'Aktywne':'Wybierz'}</button><button class="remove-car" data-id="${c.id}">Usuń</button></div></div>`).join(''):'<div class="empty-card">Dodaj pierwszy samochód. Zostanie zapisany na koncie i będzie dostępny po każdym logowaniu.</div>';$('carPickerList').innerHTML=state.cars.map(c=>`<button class="car-row pick-car" data-id="${c.id}"><div class="car-icon">🚗</div><div class="car-copy"><strong>${esc(c.name)}</strong><span>${fuelLabel(c.fuel)} · ${Number(c.consumption).toFixed(1)} l/100 km</span></div><span>›</span></button>`).join('')||'<div class="empty-card">Brak samochodów.</div>'}
 function renderFavoritesProfile(){const arr=[...state.favorites.values()];$('profileFavorites').innerHTML=arr.length?arr.map(f=>{const s=state.stations.find(x=>String(x.id)===String(f.station_id));if(!s)return'';return`<div class="favorite-row"><div class="favorite-copy"><strong>★ ${esc(s.name)}</strong><span>${esc(s.address)} · ${f.notify_new_price?'powiadomienia włączone':'powiadomienia wyłączone'}</span></div><div class="favorite-actions"><button class="fav-notify" data-id="${s.id}">${f.notify_new_price?'🔔':'🔕'}</button><button class="fav-open" data-id="${s.id}">›</button></div></div>`}).join(''):'<div class="empty-card">Nie masz jeszcze ulubionych stacji.</div>'}
-function renderRanking(){const me=state.ranking.findIndex(x=>x.id===state.user?.id);$('myRankCard').innerHTML=`<span>Twoja pozycja</span><strong>${me>=0?'#'+(me+1):'—'}</strong><span> · ${state.profile?.points||0} pkt · reputacja ${Number(state.profile?.reputation||1).toFixed(2)}</span>`;$('rankingList').innerHTML=state.ranking.length?state.ranking.map((u,i)=>`<div class="rank-row"><div class="rank-pos">${i<3?['🥇','🥈','🥉'][i]:i+1}</div><div class="rank-avatar">${esc((u.nickname||'?')[0].toUpperCase())}</div><div class="rank-user"><strong>${esc(u.nickname||'Użytkownik')}</strong><span>reputacja ${Number(u.reputation||1).toFixed(2)}</span></div><div class="rank-points">${Number(u.points||0)} pkt</div></div>`).join(''):'<div class="empty-card">Ranking jest pusty.</div>'}
+function renderRanking(){
+ const me=state.ranking.findIndex(x=>x.id===state.user?.id);
+ $('myRankCard').innerHTML=`<span>Twoja pozycja</span><strong>${me>=0?'#'+(me+1):'—'}</strong><span> · ${state.profile?.points||0} pkt · reputacja ${Number(state.profile?.reputation||1).toFixed(2)}</span>`;
+ $('rankingList').innerHTML=state.ranking.length?state.ranking.map((u,i)=>{
+ const stats=state.rankingStats[u.id];
+ return `<details class="rank-expand"><summary class="rank-row"><div class="rank-pos">${i<3?['🥇','🥈','🥉'][i]:i+1}</div><div class="rank-avatar">${esc((u.nickname||'?')[0].toUpperCase())}</div><div class="rank-user"><strong>${esc(u.nickname||'Użytkownik')}</strong><span>reputacja ${Number(u.reputation||1).toFixed(2)}</span></div><div class="rank-points">${Number(u.points||0)} pkt ▾</div></summary><div class="rank-stats">${stats?`<span>Dodane ceny <b>${stats.added_prices}</b></span><span>Otrzymane potwierdzenia <b>${stats.received_confirmations}</b></span><span>Wykonane potwierdzenia <b>${stats.given_confirmations}</b></span>`:'Statystyki niedostępne — uruchom patch SQL 1.2.5.'}</div></details>`;
+ }).join(''):'<div class="empty-card">Ranking jest pusty.</div>';
+}
 function renderProfile(){$('profileNickname').textContent=state.profile?.nickname||'Użytkownik';$('profileEmail').textContent=state.user?.email||'—';$('profileAvatar').textContent=(state.profile?.nickname||state.user?.email||'T')[0].toUpperCase();$('profileReputation').textContent=`Reputacja ${Number(state.profile?.reputation||1).toFixed(2)}`;$('nicknameState').textContent=state.profile?.nickname||'›';$('soundState').textContent=state.profile?.sounds_enabled?'włączone':'wyłączone';$('locationStatus').textContent=state.location?'włączona':'wyłączona';$('adminEntry').classList.toggle('hidden',state.profile?.role!=='admin');applyTheme(state.profile?.theme||state.theme);renderCars();renderFavoritesProfile()}
 function renderAll(){renderHome();renderProfile();renderRanking();if(state.map)renderMap()}
 
 async function loadProfile(){const hadProfile=!!state.profile,old=state.profile?.points||0;const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).single();if(error)return console.warn(error);state.profile=data;state.theme=data.theme||state.theme||'system';applyTheme(state.theme);if(hadProfile&&Number(data.points)>Number(old))awardAnimation(Number(data.points)-Number(old));renderAll()}
 async function loadCars(){const {data,error}=await sb.from('cars').select('*').eq('user_id',state.user.id).order('created_at');if(error)return toast('Nie udało się wczytać samochodów.');state.cars=(data||[]).map(c=>({id:c.id,name:c.name,engine:c.engine,fuel:c.fuel_type,consumption:Number(c.consumption),is_active:c.is_active}));state.activeCarId=state.cars.find(c=>c.is_active)?.id||state.cars[0]?.id||null;if(activeCar()&&STANDARD_FUELS.includes(activeCar().fuel))state.fuel=activeCar().fuel;savePrefs();syncFuelPicker();renderAll()}
 async function loadFavorites(){const {data,error}=await sb.from('favorite_stations').select('*').eq('user_id',state.user.id);if(error)return console.warn(error);state.favorites=new Map((data||[]).map(x=>[String(x.station_id),x]));renderAll()}
-async function loadRanking(){const {data,error}=await sb.from('profiles').select('id,nickname,points,reputation').order('points',{ascending:false}).limit(100);if(!error){state.ranking=data||[];renderRanking()}}
+async function loadRanking(){
+ const {data,error}=await sb.from('profiles').select('id,nickname,points,reputation').order('points',{ascending:false}).limit(100);
+ if(error)return;
+ state.ranking=data||[];
+ const {data:stats,error:statsError}=await sb.from('ranking_activity_stats').select('user_id,added_prices,received_confirmations,given_confirmations');
+ state.rankingStats=statsError?{}:Object.fromEntries((stats||[]).map(r=>[r.user_id,r]));
+ renderRanking();
+}
 async function loadStations(){const {data,error}=await sb.from('stations_with_latest_prices').select('*').limit(3000);if(error)return console.warn(error);state.stations=(data||[]).map(normalizeStation);fillStationSelect();renderAll()}
 function fillStationSelect(){const sel=$('reportStation');if(!sel)return;const arr=[...state.stations].sort((a,b)=>stationDistance(a)-stationDistance(b));sel.innerHTML=arr.map(s=>`<option value="${s.id}">${esc(s.name)}${s.address?' — '+esc(s.address):''}</option>`).join('')}
 
-async function syncNearbyOSM(center=state.location||JAROCIN,radius=30000){$('mapStatus').textContent='Pobieranie stacji z OpenStreetMap…';const q=`[out:json][timeout:25];(node[\"amenity\"=\"fuel\"](around:${Math.min(radius,30000)},${center.lat},${center.lng});way[\"amenity\"=\"fuel\"](around:${Math.min(radius,30000)},${center.lat},${center.lng}););out center tags;`;try{const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});const json=await res.json();const existing=new Set(state.stations.map(s=>s.externalId).filter(Boolean));const rows=json.elements.map(e=>({external_id:`osm:${e.type}:${e.id}`,name:e.tags?.brand||e.tags?.name||'Stacja paliw',brand:e.tags?.brand||null,address:[e.tags?.['addr:street'],e.tags?.['addr:housenumber'],e.tags?.['addr:city']].filter(Boolean).join(' ')||null,latitude:e.lat??e.center?.lat,longitude:e.lon??e.center?.lon,source:'osm'})).filter(x=>x.latitude&&x.longitude&&!existing.has(x.external_id));if(rows.length){const {error}=await sb.from('stations').insert(rows.slice(0,400));if(error&&!String(error.message).includes('duplicate'))console.warn(error)}await loadStations();$('mapStatus').textContent=`${state.stations.length} stacji w bazie`}catch(e){console.warn(e);$('mapStatus').textContent='Nie udało się odświeżyć stacji z OSM.'}}
-
-function initMap(){if(state.map)return;state.map=L.map('map',{zoomControl:false}).setView([JAROCIN.lat,JAROCIN.lng],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.map);L.control.zoom({position:'bottomleft'}).addTo(state.map);renderMap()}
-function renderMap(){
-  if(!state.map)return;
-  state.markers.forEach(m=>m.remove());state.markers=[];
-  for(const s of state.stations){
-    const p=s.prices[state.fuel],conf=confidence(s);
-    const color=p?(conf.cls==='high'?'#0f8f5b':conf.cls==='mid'?'#d39a16':'#b54444'):'#64748b';
-    const icon=L.divIcon({className:'',html:`<div class="map-price-pin" style="--pin:${color}">${p?fmt(p):'—'}</div>`,iconSize:[52,32],iconAnchor:[26,16]});
-    const marker=L.marker([s.lat,s.lng],{icon}).addTo(state.map);
-    // Kliknięcie pinezki otwiera bezpośrednio pełne szczegóły stacji (wszystkie paliwa),
-    // zamiast starego, uproszczonego popupu Leaflet z jedną ceną.
-    marker.on('click',()=>openStationDetails(s.id));
-    state.markers.push(marker);
+let osmSyncInFlight=false;
+async function syncNearbyOSM(center=state.location||JAROCIN,radius=30000){
+ if(osmSyncInFlight)return;
+ osmSyncInFlight=true;
+ $('mapStatus').textContent='Pobieranie stacji z OpenStreetMap…';
+ const q=`[out:json][timeout:25];(node["amenity"="fuel"](around:${Math.min(radius,30000)},${center.lat},${center.lng});way["amenity"="fuel"](around:${Math.min(radius,30000)},${center.lat},${center.lng}););out center tags;`;
+ try{
+  const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
+  if(!res.ok)throw new Error('Overpass HTTP '+res.status);
+  const json=await res.json();
+  const byExternal=new Set(state.stations.map(s=>s.externalId).filter(Boolean));
+  const seen=new Set();
+  const rows=(json.elements||[]).map(e=>({external_id:`osm:${e.type}:${e.id}`,name:e.tags?.brand||e.tags?.name||'Stacja paliw',brand:e.tags?.brand||null,address:[e.tags?.['addr:street'],e.tags?.['addr:housenumber'],e.tags?.['addr:city']].filter(Boolean).join(' ')||null,latitude:e.lat??e.center?.lat,longitude:e.lon??e.center?.lon,source:'osm'})).filter(r=>{
+   if(!Number.isFinite(r.latitude)||!Number.isFinite(r.longitude)||byExternal.has(r.external_id)||seen.has(r.external_id))return false;
+   seen.add(r.external_id);
+   const nearby=state.stations.find(s=>hav({lat:r.latitude,lng:r.longitude},{lat:s.lat,lng:s.lng})<0.035 && (s.name.toLocaleLowerCase('pl').trim()===r.name.toLocaleLowerCase('pl').trim() || s.source==='manual'));
+   return !nearby;
+  });
+  for(let i=0;i<rows.length;i+=80){
+   const {error}=await sb.from('stations').upsert(rows.slice(i,i+80),{onConflict:'external_id',ignoreDuplicates:true});
+   if(error){console.warn('OSM sync',error);break;}
   }
-  if(state.location){L.circleMarker([state.location.lat,state.location.lng],{radius:7,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(state.map)}
+  await loadStations();
+  $('mapStatus').textContent=`${state.stations.length} stacji w bazie`;
+ }catch(e){console.warn(e);$('mapStatus').textContent='Nie udało się odświeżyć stacji z OSM.';}
+ finally{osmSyncInFlight=false;}
 }
-
+function initMap(){
+ if(state.map)return;
+ state.map=L.map('map',{zoomControl:false,preferCanvas:true,zoomSnap:1,zoomDelta:1}).setView([JAROCIN.lat,JAROCIN.lng],12);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap',updateWhenIdle:true,keepBuffer:2}).addTo(state.map);
+ L.control.zoom({position:'bottomleft'}).addTo(state.map);
+ state.mapLayer=L.layerGroup().addTo(state.map);
+ state.map.on('moveend zoomend',()=>renderMap());
+ renderMap();
+}
+function renderMap(){
+ if(!state.map||!state.mapLayer)return;
+ const z=state.map.getZoom(),bounds=state.map.getBounds().pad(.3);
+ const visible=state.stations.filter(s=>bounds.contains([s.lat,s.lng]));
+ const key=`${z}|${state.fuel}|${visible.map(s=>`${s.id}:${s.prices[state.fuel]??''}:${s.updatedAt||''}`).join(',')}|${state.map.getCenter().lat.toFixed(2)}:${state.map.getCenter().lng.toFixed(2)}`;
+ if(key===state.mapRenderKey)return;
+ state.mapRenderKey=key;
+ state.mapLayer.clearLayers();state.markers=[];
+ // At małych skalach jedna pinezka na komórkę ekranu; szczegóły po przybliżeniu.
+ const grid=new Map(),cell=z<=8?110:z<=10?80:z<=12?56:0;
+ for(const st of visible){
+  if(cell){const pt=state.map.project([st.lat,st.lng],z),key=`${Math.floor(pt.x/cell)}:${Math.floor(pt.y/cell)}`;if(!grid.has(key))grid.set(key,[]);grid.get(key).push(st)}
+  else grid.set(String(st.id),[st]);
+ }
+ for(const group of grid.values()){
+  const s=group[0],count=group.length;
+  const p=s.prices[state.fuel],conf=confidence(s);
+  const color=count>1?'#125b45':p?(conf.cls==='high'?'#0f8f5b':conf.cls==='mid'?'#d39a16':'#b54444'):'#64748b';
+  const lat=count>1?group.reduce((a,x)=>a+x.lat,0)/count:s.lat,lng=count>1?group.reduce((a,x)=>a+x.lng,0)/count:s.lng;
+  const icon=L.divIcon({className:'',html:`<div class="map-price-pin" style="--pin:${color}">${count>1?count+' st.':p?fmt(p):'—'}</div>`,iconSize:[52,32],iconAnchor:[26,16]});
+  const marker=L.marker([lat,lng],{icon}).addTo(state.mapLayer);
+  marker.on('click',()=>count>1?state.map.setView([lat,lng],Math.min(z+2,17)):openStationDetails(s.id));
+  state.markers.push(marker);
+ }
+ if(state.location)L.circleMarker([state.location.lat,state.location.lng],{radius:7,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(state.mapLayer);
+}
 async function requestLocation(){if(!navigator.geolocation)return toast('Ta przeglądarka nie obsługuje lokalizacji.');navigator.geolocation.getCurrentPosition(async p=>{state.location={lat:p.coords.latitude,lng:p.coords.longitude};$('locationBanner').classList.add('hidden');if(state.map)state.map.setView([state.location.lat,state.location.lng],13);renderAll();await syncNearbyOSM(state.location)},()=>toast('Nie udało się uzyskać lokalizacji.'),{enableHighAccuracy:true,timeout:12000,maximumAge:60000})}
 
-async function addCar(){const row={user_id:state.user.id,name:$('carName').value.trim(),engine:$('carEngine').value.trim()||null,fuel_type:$('carFuel').value,consumption:Number($('carConsumption').value),is_active:true};await sb.from('cars').update({is_active:false}).eq('user_id',state.user.id);const {error}=await sb.from('cars').insert(row);if(error)return toast(error.message);playSound('success');await loadCars();$('carForm').reset();$('carDialog').close()}
-async function setActiveCar(id){await sb.from('cars').update({is_active:false}).eq('user_id',state.user.id);const {error}=await sb.from('cars').update({is_active:true}).eq('id',id).eq('user_id',state.user.id);if(error)return toast(error.message);$('carPickerDialog').close();playSound('tap');await loadCars()}
+async function addCar(){const row={user_id:state.user.id,name:$('carName').value.trim(),engine:$('carEngine').value.trim()||null,fuel_type:$('carFuel').value,consumption:Number($('carConsumption').value),is_active:true};const {error}=await sb.rpc('add_active_car',{p_name:row.name,p_engine:row.engine,p_fuel_type:row.fuel_type,p_consumption:row.consumption});if(error)return toast(error.message);playSound('success');await loadCars();$('carForm').reset();$('carDialog').close()}
+async function setActiveCar(id){const {error}=await sb.rpc('set_active_car',{p_car_id:id});if(error)return toast(error.message);$('carPickerDialog').close();playSound('tap');await loadCars()}
 async function deleteCar(id){if(!confirm('Usunąć ten samochód?'))return;await sb.from('cars').delete().eq('id',id).eq('user_id',state.user.id);await loadCars()}
 
 async function toggleFavorite(station,forceNotify=null){if(!station)return;const key=String(station.id),current=state.favorites.get(key);if(current){await sb.from('favorite_stations').delete().eq('user_id',state.user.id).eq('station_id',station.id);state.favorites.delete(key);toast('Usunięto z ulubionych.');renderAll();return}const row={user_id:state.user.id,station_id:station.id,notify_new_price:false,last_seen_price_report_id:station.latestReportId||null};const {data,error}=await sb.from('favorite_stations').insert(row).select().single();if(error)return toast(error.message);state.favorites.set(key,data);state.selectedFavoriteStation=station;renderAll();playSound('success');if(forceNotify===true)return setFavoriteNotify(station.id,true);$('favoriteNotifyDialog').showModal()}
